@@ -13,6 +13,8 @@ from typing import Any
 
 from patchright.async_api import Browser, Playwright, async_playwright
 
+from instagram_mcp_server.exceptions import CDPConnectionError
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_DEBUGGING_PORT = 9222
@@ -111,7 +113,7 @@ async def connect_to_brave(
         Connected Browser instance
 
     Raises:
-        ConnectionError: If Brave is not running with remote debugging
+        CDPConnectionError: If Brave is not running with remote debugging
     """
     debugging_address = get_debugging_address(port)
 
@@ -132,11 +134,7 @@ async def connect_to_brave(
 
     except Exception as e:
         logger.error(f"Failed to connect to Brave: {e}")
-        raise ConnectionError(
-            f"Could not connect to Brave browser at {debugging_address}. "
-            f"Ensure Brave is running with --remote-debugging-port={port or DEFAULT_DEBUGGING_PORT}\n"
-            f"Error: {e}"
-        ) from e
+        raise CDPConnectionError() from e
 
 
 async def verify_instagram_session(browser: Browser) -> bool:

@@ -57,3 +57,26 @@ class DockerHostLoginRequiredError(InstagramMCPError):
 
 class LinuxBrowserDependencyError(InstagramMCPError):
     """Linux host dependencies required for Chromium are missing."""
+
+
+class CDPConnectionError(InstagramMCPError):
+    """Failed to connect to Brave browser via CDP.
+
+    This error is raised when the server cannot establish a CDP connection
+    to a running Brave browser instance.
+    """
+
+    default_message = (
+        "Could not connect to Brave browser via CDP.\n\n"
+        "To fix this:\n"
+        "  1. Launch Brave with remote debugging:\n"
+        "     uv run instagram-launch-brave\n"
+        "  2. Or manually:\n"
+        "     brave-browser --remote-debugging-port=9222\n"
+        "  3. Log into Instagram in that browser window\n"
+        "  4. Retry this tool\n\n"
+        "For more information, see docs/CDP_MODE.md"
+    )
+
+    def __init__(self, message: str | None = None):
+        super().__init__(message or self.default_message)
