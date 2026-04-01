@@ -16,6 +16,46 @@ Through this Instagram MCP server, AI assistants like Claude can connect to your
 [![Docker](https://img.shields.io/badge/Docker-Universal_MCP-008fe2?style=for-the-badge&logo=docker&logoColor=008fe2)](#-docker-setup)
 [![Development](https://img.shields.io/badge/Development-Local-ffdc53?style=for-the-badge&logo=python&logoColor=ffdc53)](#-local-setup-develop--contribute)
 
+## 🎯 CDP Mode (Recommended - No Bot Detection)
+
+**CDP (Chrome DevTools Protocol) mode** connects directly to your running Brave browser, eliminating Instagram's bot detection by using your real browser fingerprint and existing session.
+
+### Quick Start
+
+```bash
+# 1. Launch Brave with remote debugging
+uv run instagram-launch-brave
+
+# 2. Log into Instagram in the Brave window that opens
+
+# 3. Run the MCP server (automatically connects to Brave)
+uv run -m instagram_mcp_server
+```
+
+### Benefits
+
+- ✅ **No bot detection** - Uses your real browser fingerprint
+- ✅ **No captchas** - Reuses your existing logged-in session
+- ✅ **Fast startup** - No browser launch overhead (~0.1s vs ~5s)
+- ✅ **Persistent session** - Stay logged in across restarts
+
+### How It Works
+
+The MCP server connects to your Brave browser via CDP on port 9222, using your existing Instagram session. No automated browser is launched.
+
+For detailed setup and troubleshooting, see [docs/CDP_MODE.md](docs/CDP_MODE.md).
+
+### Disable CDP Mode
+
+To use legacy browser automation (deprecated):
+
+```bash
+export INSTAGRAM_USE_CDP_MODE=0
+uv run -m instagram_mcp_server
+```
+
+---
+
 ## Usage Examples
 
 ```
@@ -63,6 +103,8 @@ Search for trending hashtags related to #travel
 | `close_session` | Close browser session and clean up resources | Working |
 
 > [!IMPORTANT]
+> **New: CDP Mode (Recommended)** - Connect directly to your running Brave browser to eliminate bot detection. See [CDP Mode Setup](#-cdp-mode-recommended---no-bot-detection) below. 04/2026
+>
 > **Breaking change:** Instagram has made changes to prevent scraping. The newest version uses [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python) with persistent browser profiles instead of Playwright with session files. Old `session.json` files and `INSTAGRAM_COOKIE` env vars are no longer supported. Run `--login` again to create a new profile + cookie file that can be mounted in docker. 02/2026
 
 <br/>
@@ -158,12 +200,15 @@ parallel. Use `--log-level DEBUG` to see scraper lock wait/acquire/release logs.
 
 **Session issues:**
 
-- Browser profile is stored at `~/.instagram-mcp/profile/`
+- **CDP Mode:** Ensure Brave is running with `--remote-debugging-port=9222`
+- **Legacy Mode:** Browser profile is stored at `~/.instagram-mcp/profile/`
 - Managed browser downloads are cached at `~/.instagram-mcp/patchright-browsers/`
 - Make sure you have only one active Instagram session at a time
 
 **Login issues:**
 
+- **CDP Mode:** Check Brave is running: `ps aux | grep brave | grep remote-debugging`
+- **CDP Mode:** See [docs/CDP_MODE.md](docs/CDP_MODE.md) for troubleshooting
 - Instagram may require a login confirmation in the Instagram mobile app for `--login`
 - You might get a captcha challenge if you logged in frequently. Run `uvx instagram-scraper-mcp --login` which opens a browser where you can solve it manually.
 
