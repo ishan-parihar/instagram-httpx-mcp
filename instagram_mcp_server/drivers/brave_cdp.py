@@ -81,14 +81,19 @@ def get_debugging_address(port: int | None = None) -> str:
     Get the CDP debugging address for Brave browser.
 
     Args:
-        port: Remote debugging port. Defaults to 9222.
+        port: Remote debugging port. Defaults to 9222 or config value.
 
     Returns:
         CDP WebSocket address
     """
-    debugging_port = port or DEFAULT_DEBUGGING_PORT
+    if port is None:
+        from instagram_mcp_server.config import get_config
+
+        config = get_config()
+        port = config.browser.cdp_port
+
     # Use 127.0.0.1 instead of localhost to avoid IPv6 issues
-    return f"http://127.0.0.1:{debugging_port}"
+    return f"http://127.0.0.1:{port}"
 
 
 async def connect_to_brave(

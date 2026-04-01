@@ -53,6 +53,10 @@ class EnvironmentKeys:
     CHROME_PATH = "CHROME_PATH"
     USER_DATA_DIR = "USER_DATA_DIR"
 
+    # CDP mode
+    USE_CDP_MODE = "INSTAGRAM_USE_CDP_MODE"
+    CDP_PORT = "INSTAGRAM_DEBUGGING_PORT"
+
 
 def is_interactive_environment() -> bool:
     """
@@ -155,6 +159,20 @@ def load_from_env(config: AppConfig) -> AppConfig:
     if chrome_path_env := os.environ.get(EnvironmentKeys.CHROME_PATH):
         config.browser.chrome_path = chrome_path_env
 
+    # CDP mode
+    if cdp_mode_env := os.environ.get(EnvironmentKeys.USE_CDP_MODE):
+        value = _normalize_env(cdp_mode_env)
+        config.browser.use_cdp_mode = value not in FALSY_VALUES
+
+    # CDP debugging port
+    if cdp_port_env := os.environ.get(EnvironmentKeys.CDP_PORT):
+        try:
+            config.browser.cdp_port = int(cdp_port_env)
+        except ValueError:
+            raise ConfigurationError(
+                f"Invalid {EnvironmentKeys.CDP_PORT}: '{cdp_port_env}'. Must be an integer."
+            )
+
     return config
 
 
@@ -244,6 +262,28 @@ def load_from_args(config: AppConfig) -> AppConfig:
         help="Path to Chrome/Chromium executable (for custom browser installations)",
     )
 
+    # CDP mode configuration
+    cdp_group = parser.add_mutually_exclusive_group()
+    cdp_group.add_argument(
+        "--cdp",
+        action="store_true",
+        default=None,
+        help="Use CDP mode to connect to running Brave browser (default: enabled)",
+    )
+    cdp_group.add_argument(
+        "--no-cdp",
+        action="store_true",
+        help="Disable CDP mode (use legacy browser automation)",
+    )
+
+    parser.add_argument(
+        "--cdp-port",
+        type=int,
+        default=None,
+        metavar="PORT",
+        help="CDP debugging port (default: 9222)",
+    )
+
     # Session management
     parser.add_argument(
         "--login",
@@ -316,6 +356,15 @@ def load_from_args(config: AppConfig) -> AppConfig:
 
     if args.chrome_path:
         config.browser.chrome_path = args.chrome_path
+
+    # CDP mode
+    if args.cdp is not None:
+        config.browser.use_cdp_mode = args.cdp
+    elif args.no_cdp is not None:
+        config.browser.use_cdp_mode = not args.no_cdp
+
+    if args.cdp_port is not None:
+        config.browser.cdp_port = args.cdp_port
 
     # Session management
     if args.login:

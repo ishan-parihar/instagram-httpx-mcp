@@ -30,6 +30,10 @@ class BrowserConfig:
     chrome_path: str | None = None  # Path to Chrome/Chromium executable
     user_data_dir: str = "~/.instagram-mcp/profile"  # Persistent browser profile
 
+    # CDP mode configuration
+    use_cdp_mode: bool = True  # Use CDP mode by default
+    cdp_port: int = 9222  # CDP debugging port
+
     def validate(self) -> None:
         """Validate browser configuration values."""
         if self.slow_mo < 0:

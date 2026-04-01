@@ -166,13 +166,14 @@ async def _feed_auth_succeeds(
 
 def _cdp_mode_enabled() -> bool:
     """Check if CDP mode is enabled via environment or config. Default is True."""
-    value = os.getenv("INSTAGRAM_USE_CDP_MODE", "1").strip().lower()
-    return value not in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }
+    # First check env var (highest priority)
+    value = os.getenv("INSTAGRAM_USE_CDP_MODE", "").strip().lower()
+    if value:  # If explicitly set, use it
+        return value not in {"0", "false", "no", "off"}
+
+    # Otherwise use config default
+    config = get_config()
+    return config.browser.use_cdp_mode
 
 
 def _wrap_cdp_browser(browser: CDPBrowser) -> BrowserManager:
