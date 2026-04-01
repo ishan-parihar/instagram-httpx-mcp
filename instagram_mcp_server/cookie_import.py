@@ -1,21 +1,20 @@
 """
-Manual cookie import for Instagram MCP Server.
+Cookie import for Instagram MCP Server.
 
-When automated browser login fails due to Instagram's bot detection,
-users can manually log in via their regular browser and export cookies.
+Primary authentication method: Import cookies from user's browser session.
+This bypasses Instagram's aggressive bot detection that blocks automated browsers.
 """
 
 import json
 import logging
-import os
 import sqlite3
 import tempfile
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
 INSTAGRAM_COOKIES = {"sessionid", "csrftoken", "ds_user_id", "ig_did", "mid"}
+REQUIRED_COOKIES = {"sessionid", "csrftoken"}
 
 
 def get_brave_cookie_db() -> Path | None:
@@ -37,7 +36,7 @@ def extract_instagram_cookies() -> dict[str, str] | None:
     """Extract Instagram cookies from Brave browser's SQLite database."""
     cookie_db = get_brave_cookie_db()
     if not cookie_db:
-        print("   Could not find Brave cookie database")
+        logger.debug("Brave cookie database not found")
         return None
 
     # Copy to temp file since SQLite DB is locked by browser
@@ -68,7 +67,6 @@ def extract_instagram_cookies() -> dict[str, str] | None:
                     cookies[name] = value
                 elif encrypted_value:
                     # Encrypted cookies need decryption (Linux only)
-                    # For now, skip encrypted cookies
                     logger.debug(f"Skipping encrypted cookie: {name}")
 
         conn.close()
@@ -81,7 +79,35 @@ def extract_instagram_cookies() -> dict[str, str] | None:
         tmp_path.unlink(missing_ok=True)
 
 
-def save_cookies_to_profile(cookies: dict[str, str], profile_dir: Path) -> bool:
+def load_cookies_from_file(cookie_file: Path) -> dict[str, str] | None:
+    """Load Instagram cookies from JSON file."""
+    if not cookie_file.exists():
+        return None
+
+    try:
+        with open(cookie_file) as f:
+            data = json.load(f)
+
+        # Handle both raw cookie dict and structured format
+        if isinstance(data, dict):
+            if "cookies" in data:
+                # Structured format
+                cookies = {}
+                for cookie in data["cookies"]:
+                    if cookie.get("name") in INSTAGRAM_COOKIES:
+                        cookies[cookie["name"]] = cookie["value"]
+                return cookies if cookies else None
+            else:
+                # Raw cookie dict
+                return {k: v for k, v in data.items() if k in INSTAGRAM_COOKIES}
+
+        return None
+    except (json.JSONDecodeError, IOError) as e:
+        logger.debug(f"Failed to load cookies: {e}")
+        return None
+
+
+def save_cookies_to_file(cookies: dict[str, str], profile_dir: Path) -> bool:
     """Save cookies to the MCP profile directory."""
     cookie_file = profile_dir / "cookies.json"
 
@@ -97,7 +123,7 @@ def save_cookies_to_profile(cookies: dict[str, str], profile_dir: Path) -> bool:
                 }
                 for name, value in cookies.items()
             ],
-            "imported_from": "brave_manual",
+            "imported_from": "brave_auto",
         }
 
         cookie_file.parent.mkdir(parents=True, exist_ok=True)
@@ -119,8 +145,8 @@ def manual_cookie_import_guide() -> None:
 ╔══════════════════════════════════════════════════════════════════╗
 ║  Instagram Cookie Import - Manual Method                         ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  When automated login fails due to bot detection, follow these  ║
-║  steps to import cookies from your regular browser:             ║
+║  When automated browser login fails due to bot detection,       ║
+║  follow these steps to import cookies from your browser:        ║
 ║                                                                  ║
 ║  1. Open Instagram in your regular Brave/Chrome browser         ║
 ║     https://www.instagram.com/                                  ║
@@ -159,8 +185,7 @@ def import_cookies_interactive() -> bool:
     print(f"   Found {len(cookies)} Instagram cookies: {list(cookies.keys())}")
 
     # Check for required cookies
-    required = {"sessionid", "csrftoken"}
-    missing = required - set(cookies.keys())
+    missing = REQUIRED_COOKIES - set(cookies.keys())
 
     if missing:
         print(f"   Warning: Missing required cookies: {missing}")
@@ -169,13 +194,53 @@ def import_cookies_interactive() -> bool:
 
     profile_dir = Path.home() / ".instagram-mcp" / "profile"
 
-    if save_cookies_to_profile(cookies, profile_dir):
-        print(f"   Cookies saved to: {profile_dir}/cookies.json")
-        print("   You can now run the MCP server.")
+    if save_cookies_to_file(cookies, profile_dir):
+        print(f"   ✓ Cookies saved to: {profile_dir}/cookies.json")
+        print("   ✓ You can now run the MCP server.")
         return True
     else:
         print("   Failed to save cookies.")
         return False
+
+
+def load_or_import_cookies(profile_dir: Path | None = None) -> dict[str, str] | None:
+    """Load existing cookies or attempt to import them.
+
+    Priority:
+    1. Load from existing cookies.json file
+    2. Auto-extract from Brave browser
+    3. Return None (user needs to import manually)
+
+    Returns:
+        Cookie dict with sessionid and csrftoken, or None if not available
+    """
+    if profile_dir is None:
+        profile_dir = Path.home() / ".instagram-mcp" / "profile"
+
+    cookie_file = profile_dir / "cookies.json"
+
+    # Try to load existing cookies
+    cookies = load_cookies_from_file(cookie_file)
+    if cookies:
+        logger.info(f"Loaded {len(cookies)} cookies from {cookie_file}")
+        missing = REQUIRED_COOKIES - set(cookies.keys())
+        if missing:
+            logger.warning(f"Missing required cookies: {missing}")
+            return None
+        return cookies
+
+    # Try to auto-extract from Brave
+    logger.info("No cookies.json found, attempting Brave extraction...")
+    cookies = extract_instagram_cookies()
+
+    if cookies:
+        missing = REQUIRED_COOKIES - set(cookies.keys())
+        if not missing:
+            if save_cookies_to_file(cookies, profile_dir):
+                logger.info(f"Auto-extracted and saved cookies to {cookie_file}")
+                return cookies
+
+    return None
 
 
 if __name__ == "__main__":

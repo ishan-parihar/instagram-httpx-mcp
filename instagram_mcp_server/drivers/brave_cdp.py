@@ -89,10 +89,14 @@ def get_debugging_address(port: int | None = None) -> str:
         CDP WebSocket address
     """
     if port is None:
-        from instagram_mcp_server.config import get_config
+        try:
+            from instagram_mcp_server.config import get_config
 
-        config = get_config()
-        port = config.browser.cdp_port
+            config = get_config()
+            port = config.browser.cdp_port
+        except (ImportError, SystemExit):
+            # Fallback to default port if config not available (e.g., during testing)
+            port = DEFAULT_DEBUGGING_PORT
 
     # Use 127.0.0.1 instead of localhost to avoid IPv6 issues
     return f"http://127.0.0.1:{port}"
