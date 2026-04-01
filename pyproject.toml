@@ -50,6 +50,7 @@ Changelog = "https://github.com/stickerdaniel/instagram-mcp-server/releases"
 [project.scripts]
 instagram-mcp-server = "instagram_mcp_server.cli_main:main"
 instagram-scraper-mcp = "instagram_mcp_server.cli_main:main"
+instagram-launch-brave = "instagram_mcp_server.scripts.launch_brave:main"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
