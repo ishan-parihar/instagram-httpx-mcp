@@ -27,6 +27,12 @@ def _reset_browser():
 
 
 @pytest.fixture(autouse=True)
+def _disable_cdp_mode(monkeypatch):
+    """Disable CDP mode for all tests - these tests are for legacy browser automation."""
+    monkeypatch.setenv("INSTAGRAM_USE_CDP_MODE", "0")
+
+
+@pytest.fixture(autouse=True)
 def _mock_config(monkeypatch, tmp_path):
     config = AppConfig()
     config.browser.user_data_dir = str(tmp_path / "profile")

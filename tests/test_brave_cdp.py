@@ -28,12 +28,12 @@ class TestGetDebuggingAddress:
     def test_default_debugging_port(self):
         """Should return default CDP address when no port specified."""
         address = get_debugging_address()
-        assert address == "http://localhost:9222"
+        assert address == "http://127.0.0.1:9222"
 
     def test_custom_debugging_port(self):
         """Should return custom CDP address when port specified."""
         address = get_debugging_address(port=9223)
-        assert address == "http://localhost:9223"
+        assert address == "http://127.0.0.1:9223"
 
 
 class TestConnectToBrave:
