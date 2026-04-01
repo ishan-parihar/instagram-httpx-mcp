@@ -8,6 +8,7 @@ the real browser's fingerprint and session.
 
 import logging
 import subprocess
+import sys
 from typing import Any
 
 from patchright.async_api import Browser, Playwright, async_playwright
@@ -24,6 +25,14 @@ def find_brave_process() -> int | None:
     Returns:
         PID if found, None otherwise
     """
+    if sys.platform == "win32":
+        return _find_brave_process_windows()
+    else:
+        return _find_brave_process_unix()
+
+
+def _find_brave_process_unix() -> int | None:
+    """Find Brave process on Unix-like systems (Linux, macOS)."""
     try:
         result = subprocess.run(
             ["pgrep", "-f", "brave.*remote-debugging-port"],
@@ -33,6 +42,35 @@ def find_brave_process() -> int | None:
         if result.returncode == 0 and result.stdout.strip():
             pids = result.stdout.strip().split("\n")
             return int(pids[0]) if pids else None
+        return None
+    except (subprocess.SubprocessError, ValueError, FileNotFoundError):
+        return None
+
+
+def _find_brave_process_windows() -> int | None:
+    """Find Brave process on Windows with remote debugging enabled."""
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq brave.exe", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW
+            if hasattr(subprocess, "CREATE_NO_WINDOW")
+            else 0,
+        )
+
+        if result.returncode == 0 and "brave.exe" in result.stdout.lower():
+            lines = result.stdout.strip().split("\n")
+            for line in lines:
+                if (
+                    "brave.exe" in line.lower()
+                    and "remote-debugging-port" in line.lower()
+                ):
+                    parts = line.split(",")
+                    if len(parts) >= 2:
+                        pid_str = parts[1].strip('"')
+                        if pid_str.isdigit():
+                            return int(pid_str)
         return None
     except (subprocess.SubprocessError, ValueError, FileNotFoundError):
         return None

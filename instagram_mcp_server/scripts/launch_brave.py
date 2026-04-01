@@ -14,13 +14,19 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-BRAVE_PATHS = [
+BRAVE_PATHS_UNIX = [
     "/opt/brave-bin/brave",
     "/usr/bin/brave-browser",
     "/usr/bin/brave",
     Path.home() / ".local/bin/brave",
-    "brave-browser",
-    "brave",
+]
+
+BRAVE_PATHS_WINDOWS = [
+    Path("C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
+    Path(
+        "C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+    ),
+    Path.home() / "AppData/Local/BraveSoftware/Brave-Browser/Application/brave.exe",
 ]
 
 DEBUGGING_PORT = 9222
@@ -28,22 +34,41 @@ DEBUGGING_PORT = 9222
 
 def find_brave_executable() -> Path | None:
     """Find Brave browser executable."""
-    for path in BRAVE_PATHS:
-        if isinstance(path, Path):
+    if sys.platform == "win32":
+        for path in BRAVE_PATHS_WINDOWS:
             if path.exists():
                 return path
-        else:
-            try:
-                result = subprocess.run(
-                    ["which", path],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    return Path(result.stdout.strip())
-            except (subprocess.SubprocessError, FileNotFoundError):
-                continue
-    return None
+        # Try finding via PATH
+        try:
+            result = subprocess.run(
+                ["where", "brave"],
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+                if hasattr(subprocess, "CREATE_NO_WINDOW")
+                else 0,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return Path(result.stdout.strip().split("\n")[0])
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass
+        return None
+    else:
+        for path in BRAVE_PATHS_UNIX:
+            if path.exists():
+                return path
+        # Try finding via PATH
+        try:
+            result = subprocess.run(
+                ["which", "brave-browser"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return Path(result.stdout.strip())
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass
+        return None
 
 
 def find_existing_brave() -> int | None:
