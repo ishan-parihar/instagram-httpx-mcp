@@ -16,7 +16,11 @@ from typing import NoReturn
 from fastmcp import Context
 
 from instagram_mcp_server.authentication import get_authentication_source
-from instagram_mcp_server.common_utils import secure_mkdir, secure_write_text, utcnow_iso
+from instagram_mcp_server.common_utils import (
+    secure_mkdir,
+    secure_write_text,
+    utcnow_iso,
+)
 from instagram_mcp_server.drivers.browser import get_profile_dir
 from instagram_mcp_server.exceptions import (
     AuthenticationBootstrapFailedError,
@@ -367,7 +371,7 @@ async def _start_login_if_needed(ctx: Context | None = None) -> None:
         _state.last_error = None
         _state.auth_completed_at = None
         _state.login_task = asyncio.create_task(
-            _run_login_flow(), name="linkedin-login"
+            _run_login_flow(), name="instagram-login"
         )
 
     if ctx is not None:
@@ -427,7 +431,7 @@ async def invalidate_auth_and_trigger_relogin(
         _state.last_error = None
         _state.auth_completed_at = None
         _state.login_task = asyncio.create_task(
-            _run_login_flow(), name="linkedin-login"
+            _run_login_flow(), name="instagram-login"
         )
 
     if ctx is not None:

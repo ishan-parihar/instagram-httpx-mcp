@@ -165,12 +165,13 @@ async def _feed_auth_succeeds(
 
 
 def _cdp_mode_enabled() -> bool:
-    """Check if CDP mode is enabled via environment or config."""
-    return os.getenv("INSTAGRAM_USE_CDP_MODE", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
+    """Check if CDP mode is enabled via environment or config. Default is True."""
+    value = os.getenv("INSTAGRAM_USE_CDP_MODE", "1").strip().lower()
+    return value not in {
+        "0",
+        "false",
+        "no",
+        "off",
     }
 
 

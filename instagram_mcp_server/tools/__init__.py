@@ -1,4 +1,4 @@
-# src/linkedin_mcp_server/tools/__init__.py
+# instagram_mcp_server/tools/__init__.py
 """
 Instagram scraping tools package.
 

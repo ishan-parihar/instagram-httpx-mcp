@@ -52,7 +52,7 @@ def get_authentication_source() -> bool:
         "  1. Run with --login to create a source browser profile (recommended)\n"
         "  2. Run with --no-headless to login interactively\n\n"
         "For Docker users:\n"
-        "  Create profile on host first: uv run -m linkedin_mcp_server --login\n"
+        "  Create profile on host first: uv run -m instagram_mcp_server --login\n"
         "  Then mount into Docker: -v ~/.instagram-mcp:/home/pwuser/.instagram-mcp"
     )
 

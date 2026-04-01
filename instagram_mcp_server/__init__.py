@@ -1,4 +1,4 @@
-# src/linkedin_mcp_server/__init__.py
+# instagram_mcp_server/__init__.py
 """
 Instagram MCP Server package.
 
