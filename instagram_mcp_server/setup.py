@@ -70,8 +70,17 @@ async def interactive_login(
             print("   Warming up browser (visiting normal sites first)...")
             await warm_up_browser(browser.page)
 
-        # Navigate to Instagram login
+        # Small delay after warm-up to let browser settle before navigating to Instagram
+        # This helps avoid triggering bot detection
+        await asyncio.sleep(2)
+
+        # Navigate to Instagram login page
+        # Using /accounts/login/ directly instead of homepage to avoid redirects
+        print("   Navigating to Instagram login...")
         await browser.page.goto("https://www.instagram.com/accounts/login/")
+
+        # Wait for page to fully load and any auto-redirects to complete
+        await asyncio.sleep(3)
 
         # Wait for manual login completion
         # 5 minute timeout (300000ms) allows time for 2FA, captcha, security challenges

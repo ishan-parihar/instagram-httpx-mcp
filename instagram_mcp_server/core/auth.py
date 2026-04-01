@@ -31,10 +31,15 @@ _AUTH_BARRIER_TEXT_MARKERS = (
 
 
 async def warm_up_browser(page: Page) -> None:
-    """Visit normal sites to appear more human-like before Instagram access."""
+    """Visit normal sites to appear more human-like before Instagram access.
+
+    IMPORTANT: Do NOT visit Instagram during warm-up - this triggers bot detection.
+    Visit completely unrelated sites to build browser trust first.
+    """
     sites = [
         "https://www.google.com",
-        "https://www.instagram.com",
+        "https://www.wikipedia.org",
+        "https://www.github.com",
     ]
 
     logger.info("Warming up browser by visiting normal sites...")
@@ -43,7 +48,8 @@ async def warm_up_browser(page: Page) -> None:
     for site in sites:
         try:
             await page.goto(site, wait_until="domcontentloaded", timeout=10000)
-            await asyncio.sleep(1)
+            # Random delay between 1-2 seconds to appear more human
+            await asyncio.sleep(1 + (hash(site) % 100) / 100)
             logger.debug("Visited %s", site)
         except Exception as e:
             failures += 1
@@ -199,6 +205,11 @@ def _is_auth_blocker_url(url: str) -> bool:
 async def wait_for_manual_login(page: Page, timeout: int = 300000) -> None:
     """Wait for user to manually complete login.
 
+    Strategy:
+    1. Check for any dialog/popups that need dismissal
+    2. Check if logged in via navigation elements
+    3. Timeout after specified duration
+
     Args:
         page: Patchright page object
         timeout: Timeout in milliseconds (default: 5 minutes)
@@ -215,6 +226,17 @@ async def wait_for_manual_login(page: Page, timeout: int = 300000) -> None:
     start_time = loop.time()
 
     while True:
+        # Check for any dialogs/popups that might need dismissal
+        # (Instagram may show "Save Login Info" or similar prompts)
+        if await resolve_remember_me_prompt(page):
+            logger.info("Dismissed dialog during manual login flow")
+            elapsed = (loop.time() - start_time) * 1000
+            if elapsed > timeout:
+                raise AuthenticationError(
+                    "Manual login timeout. Please try again and complete login faster."
+                )
+            continue
+
         if await is_logged_in(page):
             logger.info("Manual login completed successfully")
             return
