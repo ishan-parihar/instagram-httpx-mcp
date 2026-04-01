@@ -4,11 +4,18 @@ Patchright browser management for Instagram scraping.
 Provides async browser lifecycle management using BrowserManager with persistent
 context. Implements a singleton pattern for browser reuse across tool calls with
 automatic profile persistence.
+
+Supports two modes:
+1. CDP Mode (default): Connect to user's running Brave browser via CDP
+2. Legacy Mode: Launch automated browser with cookie import (deprecated)
 """
 
 import logging
 import os
+import warnings
 from pathlib import Path
+
+from patchright.async_api import Browser as CDPBrowser
 
 from instagram_mcp_server.common_utils import secure_mkdir
 from instagram_mcp_server.core import (
@@ -23,6 +30,11 @@ from instagram_mcp_server.common_utils import utcnow_iso
 from instagram_mcp_server.config import get_config
 from instagram_mcp_server.debug_trace import record_page_trace
 from instagram_mcp_server.debug_utils import stabilize_navigation
+from instagram_mcp_server.drivers.brave_cdp import (
+    connect_to_brave,
+    find_brave_process,
+    verify_instagram_session,
+)
 from instagram_mcp_server.session_state import (
     SourceState,
     clear_runtime_profile,
@@ -46,6 +58,7 @@ DEFAULT_PROFILE_DIR = Path.home() / ".instagram-mcp" / "profile"
 _browser: BrowserManager | None = None
 _browser_cookie_export_path: Path | None = None
 _headless: bool = True
+_cdp_browser: CDPBrowser | None = None
 
 
 def _debug_skip_checkpoint_restart() -> bool:
@@ -149,6 +162,35 @@ async def _feed_auth_succeeds(
         )
         await _log_feed_failure_context(browser, str(exc), exc)
         return False
+
+
+def _cdp_mode_enabled() -> bool:
+    """Check if CDP mode is enabled via environment or config."""
+    return os.getenv("INSTAGRAM_USE_CDP_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _wrap_cdp_browser(browser: CDPBrowser) -> BrowserManager:
+    """
+    Wrap a CDP-connected Browser in a BrowserManager-like interface.
+
+    This allows existing tool code to work without modification.
+    """
+    manager = BrowserManager.__new__(BrowserManager)
+    manager._context = browser.contexts[0] if browser.contexts else None
+    manager._page = (
+        browser.contexts[0].pages[0]
+        if browser.contexts and browser.contexts[0].pages
+        else None
+    )
+    manager._playwright = None
+    manager._is_authenticated = True
+    manager.user_data_dir = "<cdp-connection>"
+    return manager
 
 
 def _launch_options() -> tuple[dict[str, str], dict[str, int]]:
@@ -319,6 +361,10 @@ async def get_or_create_browser(
     """
     Get existing browser or create and initialize a new one.
 
+    Supports two modes:
+    1. CDP Mode (default): Connect to user's running Brave browser via CDP
+    2. Legacy Mode: Launch automated browser with cookie import (deprecated)
+
     Uses a singleton pattern to reuse the browser across tool calls.
     Uses persistent context for automatic profile persistence.
 
@@ -331,10 +377,53 @@ async def get_or_create_browser(
     Raises:
         AuthenticationError: If no valid authentication found
     """
-    global _browser, _browser_cookie_export_path, _headless
+    global _browser, _browser_cookie_export_path, _headless, _cdp_browser
 
     if headless is not None:
         _headless = headless
+
+    # CDP MODE: Connect to existing Brave browser (DEFAULT)
+    if _cdp_mode_enabled():
+        if _cdp_browser is not None:
+            logger.debug("Reusing existing CDP browser connection")
+            return _wrap_cdp_browser(_cdp_browser)
+
+        logger.info("CDP mode enabled - connecting to running Brave browser...")
+
+        brave_pid = find_brave_process()
+        if brave_pid is None:
+            raise AuthenticationError(
+                "Brave browser not found with remote debugging enabled.\n\n"
+                "Please launch Brave with:\n"
+                "  uv run instagram-launch-brave\n\n"
+                "Or manually:\n"
+                "  brave-browser --remote-debugging-port=9222\n\n"
+                "Then log into Instagram in that browser window."
+            )
+
+        logger.info(f"Found Brave process (PID: {brave_pid})")
+
+        _cdp_browser = await connect_to_brave()
+
+        if not await verify_instagram_session(_cdp_browser):
+            await _cdp_browser.close()
+            _cdp_browser = None
+            raise AuthenticationError(
+                "No valid Instagram session found in Brave browser.\n\n"
+                "Please log into Instagram in the Brave browser window."
+            )
+
+        logger.info("Successfully connected to authenticated Brave session")
+        return _wrap_cdp_browser(_cdp_browser)
+
+    # LEGACY MODE: Existing browser automation flow (DEPRECATED)
+    warnings.warn(
+        "Legacy browser automation mode is deprecated and will be removed in v2.0. "
+        "Please use CDP mode (connect to running Brave browser) instead. "
+        "See docs/CDP_MODE.md for migration instructions.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     if _browser is not None:
         return _browser
@@ -457,8 +546,16 @@ async def get_or_create_browser(
 
 async def close_browser() -> None:
     """Close the browser and cleanup resources."""
-    global _browser, _browser_cookie_export_path
+    global _browser, _browser_cookie_export_path, _cdp_browser
 
+    # Handle CDP browser - just disconnect, don't close user's browser
+    if _cdp_browser is not None:
+        logger.info("Closing CDP browser connection (user's browser remains open)...")
+        await _cdp_browser.close()
+        _cdp_browser = None
+        return
+
+    # Handle legacy browser
     browser = _browser
     cookie_export_path = _browser_cookie_export_path
     _browser = None
@@ -535,7 +632,8 @@ async def check_rate_limit() -> None:
 
 def reset_browser_for_testing() -> None:
     """Reset global browser state for test isolation."""
-    global _browser, _browser_cookie_export_path, _headless
+    global _browser, _browser_cookie_export_path, _headless, _cdp_browser
     _browser = None
     _browser_cookie_export_path = None
+    _cdp_browser = None
     _headless = True
