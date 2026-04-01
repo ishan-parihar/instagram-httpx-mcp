@@ -38,14 +38,30 @@ async def browser_lifespan(app: FastMCP) -> AsyncIterator[dict[str, Any]]:
 
     Derived runtime durability must not depend on this hook. Docker runtime
     sessions are checkpoint-committed when they are created.
+
+    In CDP mode, browser setup is skipped since we connect to an existing
+    Brave browser instance.
     """
     del app
     logger.info("Instagram MCP Server starting...")
     initialize_bootstrap(get_runtime_policy())
-    await start_background_browser_setup_if_needed()
+
+    # Only setup browser for legacy mode
+    from instagram_mcp_server.drivers.browser import _cdp_mode_enabled
+
+    if not _cdp_mode_enabled():
+        logger.info("Legacy mode: setting up browser...")
+        await start_background_browser_setup_if_needed()
+    else:
+        logger.info("CDP mode: skipping browser setup")
+
     yield {}
+
     logger.info("Instagram MCP Server shutting down...")
-    await close_browser()
+
+    # Only close browser for legacy mode
+    if not _cdp_mode_enabled():
+        await close_browser()
 
 
 def create_mcp_server() -> FastMCP:
