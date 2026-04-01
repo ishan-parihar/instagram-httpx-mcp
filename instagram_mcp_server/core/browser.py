@@ -162,6 +162,17 @@ class BrowserManager:
         self._page = None
         self._playwright = None
 
+        if context is not None:
+            try:
+                await context.close()
+            except Exception:
+                pass  # Ignore errors during close
+        if playwright is not None:
+            try:
+                await playwright.stop()
+            except Exception:
+                pass  # Ignore errors during stop
+
     async def _apply_stealth_measures(self, page: Page) -> None:
         """Apply stealth measures to hide automation indicators.
 
