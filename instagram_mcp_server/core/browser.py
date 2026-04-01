@@ -135,6 +135,9 @@ class BrowserManager:
             else:
                 self._page = await self._context.new_page()
 
+            # Apply stealth measures to hide automation indicators
+            await self._apply_stealth_measures(self._page)
+
             logger.info("Browser context and page ready")
 
         except Exception as e:
@@ -149,22 +152,51 @@ class BrowserManager:
         self._page = None
         self._playwright = None
 
-        if context is None and playwright is None:
-            return
+    async def _apply_stealth_measures(self, page: Page) -> None:
+        """Apply stealth measures to hide automation indicators.
 
-        if context is not None:
-            try:
-                await context.close()
-            except Exception as exc:
-                logger.error("Error closing browser context: %s", exc)
+        Instagram has sophisticated bot detection that checks for:
+        - navigator.webdriver flag
+        - Automation-related JavaScript properties
+        - Headless browser fingerprints
 
-        if playwright is not None:
-            try:
-                await playwright.stop()
-            except Exception as exc:
-                logger.error("Error stopping playwright: %s", exc)
+        These measures help evade detection.
+        """
+        try:
+            # Remove navigator.webdriver flag
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
 
-        logger.info("Browser closed")
+            # Override permissions to appear more human
+            await page.add_init_script("""
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+            """)
+
+            # Mock plugins to appear like a real browser
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+            """)
+
+            # Mock languages
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en'],
+                });
+            """)
+
+            logger.debug("Applied stealth measures to browser")
+        except Exception as e:
+            logger.warning("Failed to apply some stealth measures: %s", e)
 
     @property
     def page(self) -> Page:

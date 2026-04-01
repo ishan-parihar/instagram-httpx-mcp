@@ -49,8 +49,27 @@ async def interactive_login(
 
     launch_options: dict[str, Any] = {}
     config = get_config()
+
+    # Use system Brave browser by default - critical for avoiding bot detection
+    # Patchright's bundled Chromium is detected by Instagram's advanced bot detection
     if config.browser.chrome_path:
         launch_options["executable_path"] = config.browser.chrome_path
+    else:
+        # Default to Brave if available (most resistant to fingerprinting)
+        brave_paths = [
+            "/opt/brave-bin/brave",
+            "/usr/bin/brave-browser",
+            "/usr/bin/brave",
+            Path.home() / ".local/bin/brave",
+        ]
+        for brave_path in brave_paths:
+            brave_exe = Path(brave_path) if isinstance(brave_path, str) else brave_path
+            if brave_exe.exists():
+                launch_options["executable_path"] = str(brave_exe)
+                print(f"   Using Brave browser: {brave_exe}")
+                break
+        else:
+            print("   Warning: Brave not found, using default browser")
 
     viewport = {
         "width": config.browser.viewport_width,
