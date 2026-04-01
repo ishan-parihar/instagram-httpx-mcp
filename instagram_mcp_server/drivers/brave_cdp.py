@@ -49,12 +49,13 @@ def get_debugging_address(port: int | None = None) -> str:
         CDP WebSocket address
     """
     debugging_port = port or DEFAULT_DEBUGGING_PORT
-    return f"http://localhost:{debugging_port}"
+    # Use 127.0.0.1 instead of localhost to avoid IPv6 issues
+    return f"http://127.0.0.1:{debugging_port}"
 
 
 async def connect_to_brave(
     port: int | None = None,
-    timeout: float = 30.0,
+    timeout: float = 60.0,
 ) -> Browser:
     """
     Connect to running Brave browser via CDP.
@@ -76,9 +77,11 @@ async def connect_to_brave(
     try:
         playwright: Playwright = await async_playwright().start()
 
+        # Connect to existing Brave instance via CDP
+        # Use the browser endpoint - Playwright will discover available contexts
         browser = await playwright.chromium.connect_over_cdp(
             debugging_address,
-            timeout=timeout * 1000,
+            timeout=timeout * 1000,  # Convert to milliseconds
         )
 
         logger.info("Successfully connected to Brave browser via CDP")
@@ -88,7 +91,8 @@ async def connect_to_brave(
         logger.error(f"Failed to connect to Brave: {e}")
         raise ConnectionError(
             f"Could not connect to Brave browser at {debugging_address}. "
-            f"Ensure Brave is running with --remote-debugging-port={port or DEFAULT_DEBUGGING_PORT}"
+            f"Ensure Brave is running with --remote-debugging-port={port or DEFAULT_DEBUGGING_PORT}\n"
+            f"Error: {e}"
         ) from e
 
 
