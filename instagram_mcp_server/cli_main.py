@@ -23,7 +23,10 @@ from instagram_mcp_server.drivers.browser import (
     set_headless,
 )
 from instagram_mcp_server.debug_trace import should_keep_traces
-from instagram_mcp_server.logging_config import configure_logging, teardown_trace_logging
+from instagram_mcp_server.logging_config import (
+    configure_logging,
+    teardown_trace_logging,
+)
 from instagram_mcp_server.session_state import (
     get_runtime_id,
     load_runtime_state,
@@ -188,17 +191,47 @@ def profile_info_and_exit() -> None:
             )
 
     async def check_session() -> bool:
-        try:
-            set_headless(True)  # Always check headless
-            browser = await get_or_create_browser()
-            return browser.is_authenticated
-        except AuthenticationError:
-            return False
-        except Exception as e:
-            logger.exception(f"Unexpected error checking session: {e}")
-            raise
-        finally:
-            await close_browser()
+        """Check if a valid Instagram session exists."""
+        # Check if CDP mode is enabled
+        from instagram_mcp_server.drivers.browser import _cdp_mode_enabled
+
+        if _cdp_mode_enabled():
+            # Use CDP connection for status check
+            from instagram_mcp_server.drivers.brave_cdp import (
+                connect_to_brave,
+                verify_instagram_session,
+                find_brave_process,
+            )
+
+            try:
+                # Check if Brave is running
+                if not find_brave_process():
+                    print("⚠️  Brave browser not running with remote debugging")
+                    return False
+
+                # Connect and verify
+                browser = await connect_to_brave(timeout=10)
+                verified = await verify_instagram_session(browser)
+                await browser.close()
+
+                return verified
+
+            except Exception as e:
+                logger.debug(f"CDP session check failed: {e}")
+                return False
+        else:
+            # Legacy mode
+            try:
+                set_headless(True)  # Always check headless
+                browser = await get_or_create_browser()
+                return browser.is_authenticated
+            except AuthenticationError:
+                return False
+            except Exception as e:
+                logger.exception(f"Unexpected error checking session: {e}")
+                raise
+            finally:
+                await close_browser()
 
     if bridge_required:
         if experimental_persist_derived_runtime():
