@@ -486,9 +486,61 @@ def _move_invalid_auth_state_aside() -> None:
 
 
 async def _run_login_flow() -> None:
+    """Run interactive login flow."""
     _state.auth_state = AuthState.IN_PROGRESS
-    success = await interactive_login(get_profile_dir(), warm_up=True)
+
+    # Check if CDP mode is enabled
+    from instagram_mcp_server.drivers.browser import _cdp_mode_enabled
+
+    if _cdp_mode_enabled():
+        success = await _cdp_login_flow()
+    else:
+        from instagram_mcp_server.setup import interactive_login
+
+        success = await interactive_login(get_profile_dir(), warm_up=True)
+
     if not success:
         raise AuthenticationBootstrapFailedError(
             "Instagram login was not completed. Retry the tool call to reopen the browser and continue setup."
         )
+
+
+async def _cdp_login_flow() -> bool:
+    """Guide user through CDP mode login.
+
+    Returns:
+        True if Brave is running with CDP, False otherwise
+    """
+    from instagram_mcp_server.drivers.brave_cdp import find_brave_process
+
+    # Check if Brave is already running with CDP
+    if find_brave_process():
+        logger.info("Brave is already running with CDP")
+        return True
+
+    # Print instructions
+    print("\n" + "=" * 60)
+    print("CDP MODE: Connect to your running Brave browser")
+    print("=" * 60)
+    print("\nBrave browser is not running with remote debugging.")
+    print("\nOption 1: Quick launch (recommended)")
+    print("  Run in another terminal:")
+    print("    uv run instagram-launch-brave")
+    print("\nOption 2: Manual launch")
+    print("  Run in another terminal:")
+    print("    brave-browser --remote-debugging-port=9222")
+    print("\nThen log into Instagram in that browser window.")
+    print("\nWaiting for Brave to start...")
+
+    # Wait for Brave to start (poll for 2 minutes)
+    import asyncio
+
+    for _ in range(24):  # 2 minutes, check every 5 seconds
+        await asyncio.sleep(5)
+        if find_brave_process():
+            print("✓ Brave detected! Continuing...")
+            return True
+
+    print("\n⚠ Timeout: Brave not detected after 2 minutes")
+    print("Run 'uv run instagram-launch-brave' and try again.")
+    return False
