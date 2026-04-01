@@ -62,6 +62,10 @@ For detailed setup and troubleshooting, see [docs/CDP_MODE.md](docs/CDP_MODE.md)
 To use legacy browser automation (deprecated):
 
 ```bash
+# Option 1: Using CLI flag
+uv run -m instagram_mcp_server --no-cdp
+
+# Option 2: Using environment variable
 export INSTAGRAM_USE_CDP_MODE=0
 uv run -m instagram_mcp_server
 ```

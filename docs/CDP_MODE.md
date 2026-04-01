@@ -88,16 +88,28 @@ The server will automatically:
 
 ## Configuration
 
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--cdp` | Enable CDP mode (default: enabled) |
+| `--no-cdp` | Disable CDP mode (use legacy browser automation) |
+| `--cdp-port PORT` | Set custom CDP debugging port (default: 9222) |
+
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `INSTAGRAM_USE_CDP_MODE` | Enable CDP mode (`1`, `true`, `yes`, `on`) | `1` (enabled by default) |
+| `INSTAGRAM_USE_CDP_MODE` | Enable CDP mode (`0`, `false`, `no`, `off` to disable) | `1` (enabled by default) |
 | `INSTAGRAM_DEBUGGING_PORT` | CDP debugging port | `9222` |
 
 ### Example: Custom Port
 
 ```bash
+# Option 1: Using CLI flag
+uv run -m instagram_mcp_server --cdp-port 9223
+
+# Option 2: Using environment variable
 export INSTAGRAM_DEBUGGING_PORT=9223
 brave-browser --remote-debugging-port=9223
 uv run -m instagram_mcp_server
@@ -106,6 +118,10 @@ uv run -m instagram_mcp_server
 ### Disable CDP Mode (Use Legacy Mode)
 
 ```bash
+# Option 1: Using CLI flag
+uv run -m instagram_mcp_server --no-cdp
+
+# Option 2: Using environment variable
 export INSTAGRAM_USE_CDP_MODE=0
 uv run -m instagram_mcp_server
 ```
