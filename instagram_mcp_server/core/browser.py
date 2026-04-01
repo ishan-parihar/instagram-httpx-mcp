@@ -112,6 +112,16 @@ class BrowserManager:
                 "headless": self.headless,
                 "slow_mo": self.slow_mo,
                 "viewport": self.viewport,
+                "args": [
+                    "--disable-dev-shm-usage",
+                    "--disable-accelerated-2d-canvas",
+                    "--no-first-run",
+                    "--no-zygote",
+                    "--disable-gpu-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-sandbox",
+                    "--dns-prefetch-disable",
+                ],
                 **self.launch_options,
                 "locale": "en-US",
             }

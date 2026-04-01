@@ -18,6 +18,7 @@ from instagram_mcp_server.core import (
 from instagram_mcp_server.session_state import portable_cookie_path, write_source_state
 
 from instagram_mcp_server.drivers.browser import get_profile_dir
+from instagram_mcp_server.cookie_import import import_cookies_interactive
 
 
 async def interactive_login(
@@ -150,12 +151,45 @@ def run_profile_creation(user_data_dir: str | None = None) -> bool:
 
     print("Instagram MCP Server - Profile Creation")
     print(f"   Profile will be saved to: {profile_dir}")
+    print()
+
+    # First, try to import cookies from existing Brave session
+    print("Step 1: Attempting to import cookies from Brave browser...")
+    if import_cookies_interactive():
+        print("   ✓ Cookie import successful!")
+        print("   You can now use the MCP server.")
+        return True
+
+    print()
+    print("Step 2: Automated browser login...")
+    print()
 
     try:
         success = asyncio.run(interactive_login(profile_dir))
-        return success
+        if success:
+            return True
+
+        # Automated login failed, offer manual cookie import
+        print()
+        print("=" * 60)
+        print("Automated login failed. Instagram's bot detection blocked the")
+        print("browser. Please use the manual cookie import method:")
+        print("=" * 60)
+        print()
+
+        from instagram_mcp_server.cookie_import import manual_cookie_import_guide
+
+        manual_cookie_import_guide()
+
+        return False
+
     except Exception as e:
-        print(f"Profile creation failed: {e}")
+        print(f"Login failed: {e}")
+        print()
+        print("Please use the manual cookie import method.")
+        from instagram_mcp_server.cookie_import import manual_cookie_import_guide
+
+        manual_cookie_import_guide()
         return False
 
 
