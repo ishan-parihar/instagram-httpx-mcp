@@ -1,4 +1,4 @@
-from linkedin_mcp_server.session_state import (
+from instagram_mcp_server.session_state import (
     get_runtime_id,
     load_runtime_state,
     load_source_state,
@@ -13,7 +13,7 @@ from linkedin_mcp_server.session_state import (
 
 def test_write_source_state_creates_generation(monkeypatch, isolate_profile_dir):
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.get_runtime_id",
+        "instagram_mcp_server.session_state.get_runtime_id",
         lambda: "macos-arm64-host",
     )
 
@@ -27,7 +27,7 @@ def test_write_source_state_creates_generation(monkeypatch, isolate_profile_dir)
 
 def test_write_runtime_state_tracks_source_generation(monkeypatch, isolate_profile_dir):
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.get_runtime_id",
+        "instagram_mcp_server.session_state.get_runtime_id",
         lambda: "macos-arm64-host",
     )
     source_state = write_source_state(isolate_profile_dir)
@@ -61,7 +61,7 @@ def test_write_runtime_state_tracks_source_generation(monkeypatch, isolate_profi
 
 def test_load_source_state_ignores_unknown_fields(monkeypatch, isolate_profile_dir):
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.get_runtime_id",
+        "instagram_mcp_server.session_state.get_runtime_id",
         lambda: "macos-arm64-host",
     )
     state = write_source_state(isolate_profile_dir)
@@ -75,7 +75,7 @@ def test_load_source_state_ignores_unknown_fields(monkeypatch, isolate_profile_d
 
 def test_load_runtime_state_ignores_unknown_fields(monkeypatch, isolate_profile_dir):
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.get_runtime_id",
+        "instagram_mcp_server.session_state.get_runtime_id",
         lambda: "macos-arm64-host",
     )
     source_state = write_source_state(isolate_profile_dir)
@@ -107,7 +107,7 @@ def test_write_runtime_state_accepts_explicit_created_at(
     monkeypatch, isolate_profile_dir
 ):
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.get_runtime_id",
+        "instagram_mcp_server.session_state.get_runtime_id",
         lambda: "macos-arm64-host",
     )
     source_state = write_source_state(isolate_profile_dir)
@@ -145,13 +145,13 @@ def test_runtime_storage_state_path_uses_runtime_dir(isolate_profile_dir):
 
 def test_get_runtime_id_marks_container(monkeypatch):
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.platform.system", lambda: "Linux"
+        "instagram_mcp_server.session_state.platform.system", lambda: "Linux"
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.platform.machine", lambda: "x86_64"
+        "instagram_mcp_server.session_state.platform.machine", lambda: "x86_64"
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.Path.exists",
+        "instagram_mcp_server.session_state.Path.exists",
         lambda self: str(self) == "/.dockerenv",
     )
 
@@ -160,17 +160,17 @@ def test_get_runtime_id_marks_container(monkeypatch):
 
 def test_get_runtime_id_marks_container_from_cgroup_v2_mountinfo(monkeypatch):
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.platform.system", lambda: "Linux"
+        "instagram_mcp_server.session_state.platform.system", lambda: "Linux"
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.platform.machine", lambda: "x86_64"
+        "instagram_mcp_server.session_state.platform.machine", lambda: "x86_64"
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.Path.exists",
+        "instagram_mcp_server.session_state.Path.exists",
         lambda self: str(self) == "/proc/1/mountinfo",
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.Path.read_text",
+        "instagram_mcp_server.session_state.Path.read_text",
         lambda self, *args, **kwargs: (
             "257 248 0:61 / / rw,relatime - overlay overlay "
             "rw,lowerdir=/var/lib/docker/overlay2/l"
@@ -182,17 +182,17 @@ def test_get_runtime_id_marks_container_from_cgroup_v2_mountinfo(monkeypatch):
 
 def test_get_runtime_id_ignores_non_root_overlay_mounts(monkeypatch):
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.platform.system", lambda: "Linux"
+        "instagram_mcp_server.session_state.platform.system", lambda: "Linux"
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.platform.machine", lambda: "x86_64"
+        "instagram_mcp_server.session_state.platform.machine", lambda: "x86_64"
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.Path.exists",
+        "instagram_mcp_server.session_state.Path.exists",
         lambda self: str(self) == "/proc/1/mountinfo",
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.session_state.Path.read_text",
+        "instagram_mcp_server.session_state.Path.read_text",
         lambda self, *args, **kwargs: (
             "257 248 0:61 /var/lib/containers/storage/overlay "
             "/var/lib/containers/storage/overlay rw,relatime - overlay overlay "

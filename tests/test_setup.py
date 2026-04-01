@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from linkedin_mcp_server.config.schema import AppConfig
-from linkedin_mcp_server.session_state import portable_cookie_path
-from linkedin_mcp_server.setup import interactive_login
+from instagram_mcp_server.config.schema import AppConfig
+from instagram_mcp_server.session_state import portable_cookie_path
+from instagram_mcp_server.setup import interactive_login
 
 
 class _BrowserContextManager:
@@ -25,7 +25,7 @@ def _make_browser(*, export_cookies: bool) -> MagicMock:
     browser.page.goto = AsyncMock()
     browser.context = MagicMock()
     browser.context.cookies = AsyncMock(
-        return_value=[{"name": "li_at", "domain": ".linkedin.com"}]
+        return_value=[{"name": "sessionid", "domain": ".instagram.com"}]
     )
     browser.export_cookies = AsyncMock(return_value=export_cookies)
     return browser
@@ -40,21 +40,17 @@ def _patch_login_deps(
 ) -> None:
     """Patch all interactive_login dependencies in one place."""
     monkeypatch.setattr(
-        "linkedin_mcp_server.setup.get_config", lambda: config or AppConfig()
+        "instagram_mcp_server.setup.get_config", lambda: config or AppConfig()
     )
-    monkeypatch.setattr("linkedin_mcp_server.setup.BrowserManager", browser_factory)
-    monkeypatch.setattr("linkedin_mcp_server.setup.warm_up_browser", AsyncMock())
+    monkeypatch.setattr("instagram_mcp_server.setup.BrowserManager", browser_factory)
+    monkeypatch.setattr("instagram_mcp_server.setup.warm_up_browser", AsyncMock())
+    monkeypatch.setattr("instagram_mcp_server.setup.wait_for_manual_login", AsyncMock())
     monkeypatch.setattr(
-        "linkedin_mcp_server.setup.resolve_remember_me_prompt",
-        AsyncMock(return_value=False),
-    )
-    monkeypatch.setattr("linkedin_mcp_server.setup.wait_for_manual_login", AsyncMock())
-    monkeypatch.setattr(
-        "linkedin_mcp_server.setup.write_source_state",
+        "instagram_mcp_server.setup.write_source_state",
         write_source_state
         or MagicMock(return_value=SimpleNamespace(login_generation="gen-1")),
     )
-    monkeypatch.setattr("linkedin_mcp_server.setup.asyncio.sleep", AsyncMock())
+    monkeypatch.setattr("instagram_mcp_server.setup.asyncio.sleep", AsyncMock())
 
 
 @pytest.mark.asyncio

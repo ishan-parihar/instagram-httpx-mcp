@@ -2,14 +2,14 @@ import json
 
 import pytest
 
-from linkedin_mcp_server.authentication import (
+from instagram_mcp_server.authentication import (
     clear_auth_state,
     clear_profile,
     get_authentication_source,
 )
-from linkedin_mcp_server.drivers.browser import profile_exists
-from linkedin_mcp_server.exceptions import CredentialsNotFoundError
-from linkedin_mcp_server.session_state import (
+from instagram_mcp_server.drivers.browser import profile_exists
+from instagram_mcp_server.exceptions import CredentialsNotFoundError
+from instagram_mcp_server.session_state import (
     portable_cookie_path,
     runtime_profile_dir,
     runtime_storage_state_path,
@@ -20,7 +20,7 @@ from linkedin_mcp_server.session_state import (
 
 def _write_source_metadata(profile_dir, *, runtime_id="macos-arm64-host"):
     portable_cookie_path(profile_dir).write_text(
-        json.dumps([{"name": "li_at", "domain": ".linkedin.com"}])
+        json.dumps([{"name": "sessionid", "domain": ".instagram.com"}])
     )
     source_state_path(profile_dir).write_text(
         json.dumps(

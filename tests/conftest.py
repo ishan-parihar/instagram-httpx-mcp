@@ -4,9 +4,9 @@ import pytest
 @pytest.fixture(autouse=True)
 def reset_singletons():
     """Reset global state for test isolation."""
-    from linkedin_mcp_server.bootstrap import reset_bootstrap_for_testing
-    from linkedin_mcp_server.config import reset_config
-    from linkedin_mcp_server.drivers.browser import reset_browser_for_testing
+    from instagram_mcp_server.bootstrap import reset_bootstrap_for_testing
+    from instagram_mcp_server.config import reset_config
+    from instagram_mcp_server.drivers.browser import reset_browser_for_testing
 
     reset_bootstrap_for_testing()
     reset_browser_for_testing()
@@ -25,11 +25,11 @@ def isolate_profile_dir(tmp_path, monkeypatch):
 
     # Patch DEFAULT_PROFILE_DIR for any code still referencing the constant
     for module in [
-        "linkedin_mcp_server.drivers.browser",
-        "linkedin_mcp_server.authentication",
-        "linkedin_mcp_server.cli_main",
-        "linkedin_mcp_server.setup",
-        "linkedin_mcp_server.session_state",
+        "instagram_mcp_server.drivers.browser",
+        "instagram_mcp_server.authentication",
+        "instagram_mcp_server.cli_main",
+        "instagram_mcp_server.setup",
+        "instagram_mcp_server.session_state",
     ]:
         try:
             monkeypatch.setattr(f"{module}.DEFAULT_PROFILE_DIR", fake_profile)
@@ -38,10 +38,10 @@ def isolate_profile_dir(tmp_path, monkeypatch):
 
     # Patch get_profile_dir() in all modules that import it
     for gp_module in [
-        "linkedin_mcp_server.drivers.browser",
-        "linkedin_mcp_server.authentication",
-        "linkedin_mcp_server.cli_main",
-        "linkedin_mcp_server.setup",
+        "instagram_mcp_server.drivers.browser",
+        "instagram_mcp_server.authentication",
+        "instagram_mcp_server.cli_main",
+        "instagram_mcp_server.setup",
     ]:
         try:
             monkeypatch.setattr(f"{gp_module}.get_profile_dir", lambda: fake_profile)
@@ -50,17 +50,17 @@ def isolate_profile_dir(tmp_path, monkeypatch):
 
     try:
         monkeypatch.setattr(
-            "linkedin_mcp_server.session_state.get_source_profile_dir",
+            "instagram_mcp_server.session_state.get_source_profile_dir",
             lambda: fake_profile,
         )
     except AttributeError:
         pass
 
     for source_module in [
-        "linkedin_mcp_server.authentication",
-        "linkedin_mcp_server.drivers.browser",
-        "linkedin_mcp_server.debug_trace",
-        "linkedin_mcp_server.error_diagnostics",
+        "instagram_mcp_server.authentication",
+        "instagram_mcp_server.drivers.browser",
+        "instagram_mcp_server.debug_trace",
+        "instagram_mcp_server.error_diagnostics",
     ]:
         try:
             monkeypatch.setattr(

@@ -10,15 +10,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Type check: `uv run ty check` (using ty, not mypy)
 - Tests: `uv run pytest` (with coverage: `uv run pytest --cov`)
 - Pre-commit: `uv run pre-commit install` then `uv run pre-commit run --all-files`
-- Run server locally: `uv run -m linkedin_mcp_server --no-headless`
-- Run via uvx (PyPI/package verification only): `uvx linkedin-scraper-mcp`
-- Docker build: `docker build -t linkedin-mcp-server .`
+- Run server locally: `uv run -m instagram_mcp_server --no-headless`
+- Run via uvx (PyPI/package verification only): `uvx instagram-scraper-mcp`
+- Docker build: `docker build -t instagram-mcp-server .`
 - Install browser: `uv run patchright install chromium`
 
 ## Scraping Rules
 
-- **One section = one navigation.** Each entry in `PERSON_SECTIONS` / `COMPANY_SECTIONS` (`scraping/fields.py`) maps to exactly one page navigation. Never combine multiple URLs behind a single section.
-- **Minimize DOM dependence.** Prefer innerText and URL navigation over DOM selectors. When DOM access is unavoidable, use minimal generic selectors (`a[href*="/jobs/view/"]`) — never class names tied to LinkedIn's layout.
+- **One section = one navigation.** Each entry in `USER_SECTIONS` / `HASHTAG_SECTIONS` / `LOCATION_SECTIONS` (`scraping/fields.py`) maps to exactly one page navigation. Never combine multiple URLs behind a single section.
+- **Minimize DOM dependence.** Prefer innerText and URL navigation over DOM selectors. When DOM access is unavoidable, use minimal generic selectors (`a[href*="/p/"]`, `a[href*="/reel/"]`) — never class names tied to Instagram's hashed layout classes.
 
 ## Tool Return Format
 
@@ -26,18 +26,18 @@ All scraping tools return: `{url, sections: {name: raw_text}}`.
 
 Optional additional keys:
 
-- `references: {section_name: [{kind, url, text?, context?}]}` — LinkedIn URLs are relative paths
+- `references: {section_name: [{kind, url, text?, context?}]}` — Instagram URLs are relative paths
 - `section_errors: {section_name: {error_type, error_message, issue_template_path, runtime, ...}}`
 - `unknown_sections: [name, ...]`
-- `job_ids: [id, ...]` (search_jobs only)
+- `post_ids: [id, ...]` (search tools only)
 
 ## Verifying Bug Reports
 
-Always verify scraping bugs end-to-end against live LinkedIn, not just code analysis. Use `uv run`, not `uvx`, so the running process reflects your workspace. Use `uvx` only for packaged distribution verification. For live Docker investigations, refresh the source session first with `uv run -m linkedin_mcp_server --login` before testing each materially different approach. Assume a valid login profile already exists at `~/.linkedin-mcp/profile/`.
+Always verify scraping bugs end-to-end against live Instagram, not just code analysis. Use `uv run`, not `uvx`, so the running process reflects your workspace. Use `uvx` only for packaged distribution verification. For live Docker investigations, refresh the source session first with `uv run -m instagram_mcp_server --login` before testing each materially different approach. Assume a valid login profile already exists at `~/.instagram-mcp/profile/`.
 
 ```bash
 # Start server
-uv run -m linkedin_mcp_server --transport streamable-http --log-level DEBUG
+uv run -m instagram_mcp_server --transport streamable-http --log-level DEBUG
 
 # Initialize MCP session (grab Mcp-Session-Id from response headers)
 curl -s -D /tmp/mcp-headers -X POST http://127.0.0.1:8000/mcp \
@@ -53,7 +53,7 @@ curl -s -X POST http://127.0.0.1:8000/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "Mcp-Session-Id: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_person_profile","arguments":{"linkedin_username":"williamhgates","sections":"posts"}}}'
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_user_profile","arguments":{"instagram_username":"natgeo","sections":"posts"}}}'
 ```
 
 ## Release Process
@@ -67,7 +67,7 @@ gt submit                        # merge PR to trigger release workflow
 
 The CI release workflow automatically updates `manifest.json` and `docker-compose.yml` with the new version — do not update them manually.
 
-After the workflow completes, file a PR in the MCP registry to update the version.
+After the workflow completes, file a PR in the MCP registry to update the version for `instagram-scraper-mcp`.
 
 ## Commit Messages
 

@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastmcp.exceptions import ToolError
 
-from linkedin_mcp_server.core.exceptions import AuthenticationError, RateLimitError
-from linkedin_mcp_server.dependencies import get_ready_extractor, handle_auth_error
-from linkedin_mcp_server.exceptions import (
+from instagram_mcp_server.core.exceptions import AuthenticationError, RateLimitError
+from instagram_mcp_server.dependencies import get_ready_extractor, handle_auth_error
+from instagram_mcp_server.exceptions import (
     AuthenticationStartedError,
     DockerHostLoginRequiredError,
 )
@@ -18,15 +18,15 @@ class TestHandleAuthError:
         """On managed runtime, close browser + trigger relogin."""
         with (
             patch(
-                "linkedin_mcp_server.dependencies.get_runtime_policy",
+                "instagram_mcp_server.dependencies.get_runtime_policy",
                 return_value="managed",
             ),
             patch(
-                "linkedin_mcp_server.dependencies.close_browser",
+                "instagram_mcp_server.dependencies.close_browser",
                 new_callable=AsyncMock,
             ) as mock_close,
             patch(
-                "linkedin_mcp_server.dependencies.invalidate_auth_and_trigger_relogin",
+                "instagram_mcp_server.dependencies.invalidate_auth_and_trigger_relogin",
                 new_callable=AsyncMock,
                 side_effect=AuthenticationStartedError("login opened"),
             ) as mock_relogin,
@@ -42,7 +42,7 @@ class TestHandleAuthError:
     async def test_docker_raises_host_error(self):
         """On Docker runtime, raise DockerHostLoginRequiredError."""
         with patch(
-            "linkedin_mcp_server.dependencies.get_runtime_policy",
+            "instagram_mcp_server.dependencies.get_runtime_policy",
             return_value="docker",
         ):
             with pytest.raises(DockerHostLoginRequiredError, match="host machine"):
@@ -56,20 +56,20 @@ class TestGetReadyExtractor:
         """AuthenticationError from ensure_authenticated triggers relogin."""
         with (
             patch(
-                "linkedin_mcp_server.dependencies.ensure_tool_ready_or_raise",
+                "instagram_mcp_server.dependencies.ensure_tool_ready_or_raise",
                 new_callable=AsyncMock,
             ),
             patch(
-                "linkedin_mcp_server.dependencies.get_or_create_browser",
+                "instagram_mcp_server.dependencies.get_or_create_browser",
                 new_callable=AsyncMock,
             ),
             patch(
-                "linkedin_mcp_server.dependencies.ensure_authenticated",
+                "instagram_mcp_server.dependencies.ensure_authenticated",
                 new_callable=AsyncMock,
                 side_effect=AuthenticationError("Session expired or invalid."),
             ),
             patch(
-                "linkedin_mcp_server.dependencies.handle_auth_error",
+                "instagram_mcp_server.dependencies.handle_auth_error",
                 new_callable=AsyncMock,
                 side_effect=AuthenticationStartedError("login opened"),
             ) as mock_handle,
@@ -83,16 +83,16 @@ class TestGetReadyExtractor:
         """RateLimitError goes through raise_tool_error, not relogin."""
         with (
             patch(
-                "linkedin_mcp_server.dependencies.ensure_tool_ready_or_raise",
+                "instagram_mcp_server.dependencies.ensure_tool_ready_or_raise",
                 new_callable=AsyncMock,
             ),
             patch(
-                "linkedin_mcp_server.dependencies.get_or_create_browser",
+                "instagram_mcp_server.dependencies.get_or_create_browser",
                 new_callable=AsyncMock,
                 side_effect=RateLimitError("Too many requests"),
             ),
             patch(
-                "linkedin_mcp_server.dependencies.handle_auth_error",
+                "instagram_mcp_server.dependencies.handle_auth_error",
                 new_callable=AsyncMock,
             ) as mock_handle,
         ):
@@ -103,7 +103,7 @@ class TestGetReadyExtractor:
 
     async def test_mid_scrape_auth_error_triggers_relogin(self):
         """AuthenticationError caught in tool wrapper invokes handle_auth_error."""
-        from linkedin_mcp_server.tools.person import register_person_tools
+        from instagram_mcp_server.tools.user import register_user_tools
 
         mock_mcp = MagicMock()
         tools = {}
@@ -116,10 +116,10 @@ class TestGetReadyExtractor:
             return decorator
 
         mock_mcp.tool = capture_tool
-        register_person_tools(mock_mcp)
+        register_user_tools(mock_mcp)
 
         mock_extractor = AsyncMock()
-        mock_extractor.scrape_person = AsyncMock(
+        mock_extractor.scrape_user = AsyncMock(
             side_effect=AuthenticationError("Auth barrier detected")
         )
 
@@ -127,13 +127,13 @@ class TestGetReadyExtractor:
         mock_ctx.report_progress = AsyncMock()
 
         with patch(
-            "linkedin_mcp_server.tools.person.handle_auth_error",
+            "instagram_mcp_server.tools.user.handle_auth_error",
             new_callable=AsyncMock,
             side_effect=AuthenticationStartedError("login opened"),
         ) as mock_handle:
             with pytest.raises(ToolError, match="login opened"):
-                await tools["get_person_profile"](
-                    linkedin_username="testuser",
+                await tools["get_user_profile"](
+                    username="testuser",
                     ctx=mock_ctx,
                     extractor=mock_extractor,
                 )

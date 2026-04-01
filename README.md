@@ -1,13 +1,13 @@
-# LinkedIn MCP Server
+# Instagram MCP Server
 
 <p align="left">
-  <a href="https://pypi.org/project/linkedin-scraper-mcp/" target="_blank"><img src="https://img.shields.io/pypi/v/linkedin-scraper-mcp?color=blue" alt="PyPI"></a>
-  <a href="https://github.com/stickerdaniel/linkedin-mcp-server/actions/workflows/ci.yml" target="_blank"><img src="https://github.com/stickerdaniel/linkedin-mcp-server/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status"></a>
-  <a href="https://github.com/stickerdaniel/linkedin-mcp-server/actions/workflows/release.yml" target="_blank"><img src="https://github.com/stickerdaniel/linkedin-mcp-server/actions/workflows/release.yml/badge.svg?branch=main" alt="Release"></a>
-  <a href="https://github.com/stickerdaniel/linkedin-mcp-server/blob/main/LICENSE" target="_blank"><img src="https://img.shields.io/badge/License-Apache%202.0-%233fb950?labelColor=32383f" alt="License"></a>
+  <a href="https://pypi.org/project/instagram-scraper-mcp/" target="_blank"><img src="https://img.shields.io/pypi/v/instagram-scraper-mcp?color=blue" alt="PyPI"></a>
+  <a href="https://github.com/stickerdaniel/instagram-mcp-server/actions/workflows/ci.yml" target="_blank"><img src="https://github.com/stickerdaniel/instagram-mcp-server/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status"></a>
+  <a href="https://github.com/stickerdaniel/instagram-mcp-server/actions/workflows/release.yml" target="_blank"><img src="https://github.com/stickerdaniel/instagram-mcp-server/actions/workflows/release.yml/badge.svg?branch=main" alt="Release"></a>
+  <a href="https://github.com/stickerdaniel/instagram-mcp-server/blob/main/LICENSE" target="_blank"><img src="https://img.shields.io/badge/License-Apache%202.0-%233fb950?labelColor=32383f" alt="License"></a>
 </p>
 
-Through this LinkedIn MCP server, AI assistants like Claude can connect to your LinkedIn. Access profiles and companies, search for jobs, or get job details.
+Through this Instagram MCP server, AI assistants like Claude can connect to your Instagram. Access profiles and posts, search for users, hashtags, and locations, or manage Business/Creator insights and direct messages.
 
 ## Installation Methods
 
@@ -16,46 +16,54 @@ Through this LinkedIn MCP server, AI assistants like Claude can connect to your 
 [![Docker](https://img.shields.io/badge/Docker-Universal_MCP-008fe2?style=for-the-badge&logo=docker&logoColor=008fe2)](#-docker-setup)
 [![Development](https://img.shields.io/badge/Development-Local-ffdc53?style=for-the-badge&logo=python&logoColor=ffdc53)](#-local-setup-develop--contribute)
 
-<https://github.com/user-attachments/assets/eb84419a-6eaf-47bd-ac52-37bc59c83680>
-
 ## Usage Examples
 
 ```
-Research the background of this candidate https://www.linkedin.com/in/stickerdaniel/
+Research the background of this creator https://www.instagram.com/natgeo/
 ```
 
 ```
-Get this company profile for partnership discussions https://www.linkedin.com/company/inframs/
+Get this business profile for partnership discussions https://www.instagram.com/airbnb/
 ```
 
 ```
-Suggest improvements for my CV to target this job posting https://www.linkedin.com/jobs/view/4252026496
+What has Anthropic been posting about recently? https://www.instagram.com/anthropic_ai/
 ```
 
 ```
-What has Anthropic been posting about recently? https://www.linkedin.com/company/anthropicresearch/
+Search for trending hashtags related to #travel
 ```
 
 ## Features & Tool Status
 
 | Tool | Description | Status |
 |------|-------------|--------|
-| `get_person_profile` | Get profile info with explicit section selection (experience, education, interests, honors, languages, contact_info, posts) | Working |
-| `connect_with_person` | Send a connection request or accept an incoming one, with optional note | Working |
-| `get_sidebar_profiles` | Extract profile URLs from sidebar recommendation sections ("More profiles for you", "Explore premium profiles", "People you may know") on a profile page | Working |
-| `get_inbox` | List recent conversations from the LinkedIn messaging inbox | Working |
-| `get_conversation` | Read a specific messaging conversation by username or thread ID | Working |
-| `search_conversations` | Search messages by keyword | Working |
-| `send_message` | Send a message to a LinkedIn user (requires confirmation) | Working |
-| `get_company_profile` | Extract company information with explicit section selection (posts, jobs) | Working |
-| `get_company_posts` | Get recent posts from a company's LinkedIn feed | Working |
-| `search_jobs` | Search for jobs with keywords and location filters | Working |
-| `search_people` | Search for people by keywords and location | Working |
-| `get_job_details` | Get detailed information about a specific job posting | Working |
+| `get_user_profile` | Get profile info with explicit section selection (posts, reels, stories, highlights, tagged, followers, following) | Working |
+| `get_user_posts` | Get recent posts from a user's Instagram feed | Working |
+| `get_user_reels` | Get reels from a user's profile | Working |
+| `get_user_stories` | Get current stories from a user | Working |
+| `get_user_highlights` | Get story highlights from a user | Working |
+| `get_business_insights` | Get Business/Creator account insights (reach, impressions, engagement) | Working |
+| `get_audience_insights` | Get audience demographics and analytics for Business/Creator accounts | Working |
+| `search_users` | Search for users by keywords | Working |
+| `search_hashtags` | Search for hashtags by keyword | Working |
+| `search_locations` | Search for locations by keyword | Working |
+| `get_post_details` | Get detailed information about a specific post or reel | Working |
+| `get_hashtag_posts` | Get recent posts for a specific hashtag | Working |
+| `get_location_posts` | Get recent posts for a specific location | Working |
+| `get_direct_inbox` | List recent conversations from the Instagram direct message inbox | Working |
+| `get_dm_conversation` | Read a specific DM conversation by thread ID | Working |
+| `send_dm` | Send a direct message to a user (requires confirmation) | Working |
+| `follow_user` | Follow a user | Working |
+| `unfollow_user` | Unfollow a user | Working |
+| `like_post` | Like a post or reel | Working |
+| `unlike_post` | Unlike a post or reel | Working |
+| `save_post` | Save a post or reel | Working |
+| `comment_on_post` | Add a comment to a post or reel | Working |
 | `close_session` | Close browser session and clean up resources | Working |
 
 > [!IMPORTANT]
-> **Breaking change:** LinkedIn recently made some changes to prevent scraping. The newest version uses [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python) with persistent browser profiles instead of Playwright with session files. Old `session.json` files and `LINKEDIN_COOKIE` env vars are no longer supported. Run `--login` again to create a new profile + cookie file that can be mounted in docker. 02/2026
+> **Breaking change:** Instagram has made changes to prevent scraping. The newest version uses [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python) with persistent browser profiles instead of Playwright with session files. Old `session.json` files and `INSTAGRAM_COOKIE` env vars are no longer supported. Run `--login` again to create a new profile + cookie file that can be mounted in docker. 02/2026
 
 <br/>
 <br/>
@@ -71,18 +79,18 @@ What has Anthropic been posting about recently? https://www.linkedin.com/company
 ```json
 {
   "mcpServers": {
-    "linkedin": {
+    "instagram": {
       "command": "uvx",
-      "args": ["linkedin-scraper-mcp"]
+      "args": ["instagram-scraper-mcp"]
     }
   }
 }
 ```
 
-The server starts quickly, prepares the shared Patchright Chromium browser cache in the background under `~/.linkedin-mcp/patchright-browsers`, and opens a LinkedIn login browser window on the first tool call that needs authentication.
+The server starts quickly, prepares the shared Patchright Chromium browser cache in the background under `~/.instagram-mcp/patchright-browsers`, and opens an Instagram login browser window on the first tool call that needs authentication.
 
 > [!NOTE]
-> Early tool calls may return a setup/authentication-in-progress error until browser setup or login finishes. If you prefer to create a session explicitly, run `uvx linkedin-scraper-mcp --login`.
+> Early tool calls may return a setup/authentication-in-progress error until browser setup or login finishes. If you prefer to create a session explicitly, run `uvx instagram-scraper-mcp --login`.
 
 ### uvx Setup Help
 
@@ -105,28 +113,28 @@ The server starts quickly, prepares the shared Patchright Chromium browser cache
 - `--host HOST` - HTTP server host (default: 127.0.0.1)
 - `--port PORT` - HTTP server port (default: 8000)
 - `--path PATH` - HTTP server path (default: /mcp)
-- `--logout` - Clear stored LinkedIn browser profile
+- `--logout` - Clear stored Instagram browser profile
 - `--timeout MS` - Browser timeout for page operations in milliseconds (default: 5000)
-- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.linkedin-mcp/profile)
+- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.instagram-mcp/profile)
 - `--chrome-path PATH` - Path to Chrome/Chromium executable (for custom browser installations)
 
 **Basic Usage Examples:**
 
 ```bash
 # Run with debug logging
-uvx linkedin-scraper-mcp --log-level DEBUG
+uvx instagram-scraper-mcp --log-level DEBUG
 ```
 
 **HTTP Mode Example (for web-based MCP clients):**
 
 ```bash
-uvx linkedin-scraper-mcp --transport streamable-http --host 127.0.0.1 --port 8080 --path /mcp
+uvx instagram-scraper-mcp --transport streamable-http --host 127.0.0.1 --port 8080 --path /mcp
 ```
 
 Runtime server logs are emitted by FastMCP/Uvicorn.
 
 Tool calls are serialized within a single server process to protect the shared
-LinkedIn browser session. Concurrent client requests queue instead of running in
+Instagram browser session. Concurrent client requests queue instead of running in
 parallel. Use `--log-level DEBUG` to see scraper lock wait/acquire/release logs.
 
 **Test with mcp inspector:**
@@ -150,14 +158,14 @@ parallel. Use `--log-level DEBUG` to see scraper lock wait/acquire/release logs.
 
 **Session issues:**
 
-- Browser profile is stored at `~/.linkedin-mcp/profile/`
-- Managed browser downloads are cached at `~/.linkedin-mcp/patchright-browsers/`
-- Make sure you have only one active LinkedIn session at a time
+- Browser profile is stored at `~/.instagram-mcp/profile/`
+- Managed browser downloads are cached at `~/.instagram-mcp/patchright-browsers/`
+- Make sure you have only one active Instagram session at a time
 
 **Login issues:**
 
-- LinkedIn may require a login confirmation in the LinkedIn mobile app for `--login`
-- You might get a captcha challenge if you logged in frequently. Run `uvx linkedin-scraper-mcp --login` which opens a browser where you can solve it manually.
+- Instagram may require a login confirmation in the Instagram mobile app for `--login`
+- You might get a captcha challenge if you logged in frequently. Run `uvx instagram-scraper-mcp --login` which opens a browser where you can solve it manually.
 
 **Timeout issues:**
 
@@ -181,11 +189,11 @@ parallel. Use `--log-level DEBUG` to see scraper lock wait/acquire/release logs.
 
 **One-click installation** for Claude Desktop users:
 
-1. Download the latest `.mcpb` artifact from [releases](https://github.com/stickerdaniel/linkedin-mcp-server/releases/latest)
+1. Download the latest `.mcpb` artifact from [releases](https://github.com/stickerdaniel/instagram-mcp-server/releases/latest)
 2. Click the downloaded `.mcpb` file to install it into Claude Desktop
-3. Call any LinkedIn tool
+3. Call any Instagram tool
 
-On startup, the MCP Bundle starts preparing the shared Patchright Chromium browser cache in the background. If you call a tool too early, Claude will surface a setup-in-progress error. On the first tool call that needs authentication, the server opens a LinkedIn login browser window and asks you to retry after sign-in.
+On startup, the MCP Bundle starts preparing the shared Patchright Chromium browser cache in the background. If you call a tool too early, Claude will surface a setup-in-progress error. On the first tool call that needs authentication, the server opens an Instagram login browser window and asks you to retry after sign-in.
 
 ### MCP Bundle Setup Help
 
@@ -196,13 +204,13 @@ On startup, the MCP Bundle starts preparing the shared Patchright Chromium brows
 
 - Claude Desktop starts the bundle immediately; browser setup continues in the background
 - If the Patchright Chromium browser is still downloading, retry the tool after a short wait
-- Managed browser downloads are shared under `~/.linkedin-mcp/patchright-browsers/`
+- Managed browser downloads are shared under `~/.instagram-mcp/patchright-browsers/`
 
 **Login issues:**
 
-- Make sure you have only one active LinkedIn session at a time
-- LinkedIn may require a login confirmation in the LinkedIn mobile app for `--login`
-- You might get a captcha challenge if you logged in frequently. Run `uvx linkedin-scraper-mcp --login` which opens a browser where you can solve captchas manually. See the [uvx setup](#-uvx-setup-recommended---universal) for prerequisites.
+- Make sure you have only one active Instagram session at a time
+- Instagram may require a login confirmation in the Instagram mobile app for `--login`
+- You might get a captcha challenge if you logged in frequently. Run `uvx instagram-scraper-mcp --login` which opens a browser where you can solve captchas manually. See the [uvx setup](#-uvx-setup-recommended---universal) for prerequisites.
 
 **Timeout issues:**
 
@@ -226,22 +234,22 @@ Docker runs headless (no browser window), so you need to create a browser profil
 **Step 1: Create profile on the host (one-time setup)**
 
 ```bash
-uvx linkedin-scraper-mcp --login
+uvx instagram-scraper-mcp --login
 ```
 
-This opens a browser window where you log in manually (5 minute timeout for 2FA, captcha, etc.). The browser profile and cookies are saved under `~/.linkedin-mcp/`. On startup, Docker derives a Linux browser profile from your host cookies and creates a fresh session each time. If you experience stability issues with Docker, consider using the [uvx setup](#-uvx-setup-recommended---universal) instead.
+This opens a browser window where you log in manually (5 minute timeout for 2FA, captcha, etc.). The browser profile and cookies are saved under `~/.instagram-mcp/`. On startup, Docker derives a Linux browser profile from your host cookies and creates a fresh session each time. If you experience stability issues with Docker, consider using the [uvx setup](#-uvx-setup-recommended---universal) instead.
 
 **Step 2: Configure Claude Desktop with Docker**
 
 ```json
 {
   "mcpServers": {
-    "linkedin": {
+    "instagram": {
       "command": "docker",
       "args": [
         "run", "--rm", "-i",
-        "-v", "~/.linkedin-mcp:/home/pwuser/.linkedin-mcp",
-        "stickerdaniel/linkedin-mcp-server:latest"
+        "-v", "~/.instagram-mcp:/home/pwuser/.instagram-mcp",
+        "stickerdaniel/instagram-mcp-server:latest"
       ]
     }
   }
@@ -249,7 +257,7 @@ This opens a browser window where you log in manually (5 minute timeout for 2FA,
 ```
 
 > [!NOTE]
-> Docker creates a fresh session on each startup. Sessions may expire over time — run `uvx linkedin-scraper-mcp --login` again if you encounter authentication issues.
+> Docker creates a fresh session on each startup. Sessions may expire over time — run `uvx instagram-scraper-mcp --login` again if you encounter authentication issues.
 
 > [!NOTE]
 > **Why can't I run `--login` in Docker?** Docker containers don't have a display server. Create a profile on your host using the [uvx setup](#-uvx-setup-recommended---universal) and mount it into Docker.
@@ -273,9 +281,9 @@ This opens a browser window where you log in manually (5 minute timeout for 2FA,
 - `--host HOST` - HTTP server host (default: 127.0.0.1)
 - `--port PORT` - HTTP server port (default: 8000)
 - `--path PATH` - HTTP server path (default: /mcp)
-- `--logout` - Clear all stored LinkedIn auth state, including source and derived runtime profiles
+- `--logout` - Clear all stored Instagram auth state, including source and derived runtime profiles
 - `--timeout MS` - Browser timeout for page operations in milliseconds (default: 5000)
-- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.linkedin-mcp/profile)
+- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.instagram-mcp/profile)
 - `--chrome-path PATH` - Path to Chrome/Chromium executable (rarely needed in Docker)
 
 > [!NOTE]
@@ -285,9 +293,9 @@ This opens a browser window where you log in manually (5 minute timeout for 2FA,
 
 ```bash
 docker run -it --rm \
-  -v ~/.linkedin-mcp:/home/pwuser/.linkedin-mcp \
+  -v ~/.instagram-mcp:/home/pwuser/.instagram-mcp \
   -p 8080:8080 \
-  stickerdaniel/linkedin-mcp-server:latest \
+  stickerdaniel/instagram-mcp-server:latest \
   --transport streamable-http --host 0.0.0.0 --port 8080 --path /mcp
 ```
 
@@ -314,9 +322,9 @@ Runtime server logs are emitted by FastMCP/Uvicorn.
 
 **Login issues:**
 
-- Make sure you have only one active LinkedIn session at a time
-- LinkedIn may require a login confirmation in the LinkedIn mobile app for `--login`
-- You might get a captcha challenge if you logged in frequently. Run `uvx linkedin-scraper-mcp --login` which opens a browser where you can solve captchas manually. See the [uvx setup](#-uvx-setup-recommended---universal) for prerequisites.
+- Make sure you have only one active Instagram session at a time
+- Instagram may require a login confirmation in the Instagram mobile app for `--login`
+- You might get a captcha challenge if you logged in frequently. Run `uvx instagram-scraper-mcp --login` which opens a browser where you can solve captchas manually. See the [uvx setup](#-uvx-setup-recommended---universal) for prerequisites.
 - If Docker auth becomes stale after you re-login on the host, restart Docker once so it can fresh-bridge from the new source session generation.
 
 **Timeout issues:**
@@ -337,7 +345,7 @@ Runtime server logs are emitted by FastMCP/Uvicorn.
 
 ## 🐍 Local Setup (Develop & Contribute)
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture guidelines and checklists. Please [open an issue](https://github.com/stickerdaniel/linkedin-mcp-server/issues) first to discuss the feature or bug fix before submitting a PR.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture guidelines and checklists. Please [open an issue](https://github.com/stickerdaniel/instagram-mcp-server/issues) first to discuss the feature or bug fix before submitting a PR.
 
 **Prerequisites:** [Git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/) installed
 
@@ -345,8 +353,8 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for architectu
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/stickerdaniel/linkedin-mcp-server
-cd linkedin-mcp-server
+git clone https://github.com/stickerdaniel/instagram-mcp-server
+cd instagram-mcp-server
 
 # 2. Install UV package manager (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -359,10 +367,10 @@ uv sync --group dev
 uv run pre-commit install
 
 # 5. Start the server
-uv run -m linkedin_mcp_server
+uv run -m instagram_mcp_server
 ```
 
-The local server uses the same managed-runtime flow as MCPB and `uvx`: it prepares the Patchright Chromium browser cache in the background and opens LinkedIn login on the first auth-requiring tool call. You can still run `uv run -m linkedin_mcp_server --login` when you want to create the session explicitly.
+The local server uses the same managed-runtime flow as MCPB and `uvx`: it prepares the Patchright Chromium browser cache in the background and opens Instagram login on the first auth-requiring tool call. You can still run `uv run -m instagram_mcp_server --login` when you want to create the session explicitly.
 
 ### Local Setup Help
 
@@ -378,10 +386,10 @@ The local server uses the same managed-runtime flow as MCPB and `uvx`: it prepar
 - `--host HOST` - HTTP server host (default: 127.0.0.1)
 - `--port PORT` - HTTP server port (default: 8000)
 - `--path PATH` - HTTP server path (default: /mcp)
-- `--logout` - Clear stored LinkedIn browser profile
+- `--logout` - Clear stored Instagram browser profile
 - `--timeout MS` - Browser timeout for page operations in milliseconds (default: 5000)
 - `--status` - Check if current session is valid and exit
-- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.linkedin-mcp/profile)
+- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.instagram-mcp/profile)
 - `--slow-mo MS` - Delay between browser actions in milliseconds (default: 0, useful for debugging)
 - `--user-agent STRING` - Custom browser user agent
 - `--viewport WxH` - Browser viewport size (default: 1280x720)
@@ -393,7 +401,7 @@ The local server uses the same managed-runtime flow as MCPB and `uvx`: it prepar
 **HTTP Mode Example (for web-based MCP clients):**
 
 ```bash
-uv run -m linkedin_mcp_server --transport streamable-http --host 127.0.0.1 --port 8000 --path /mcp
+uv run -m instagram_mcp_server --transport streamable-http --host 127.0.0.1 --port 8000 --path /mcp
 ```
 
 **Claude Desktop:**
@@ -401,9 +409,9 @@ uv run -m linkedin_mcp_server --transport streamable-http --host 127.0.0.1 --por
 ```json
 {
   "mcpServers": {
-    "linkedin": {
+    "instagram": {
       "command": "uv",
-      "args": ["--directory", "/path/to/linkedin-mcp-server", "run", "-m", "linkedin_mcp_server"]
+      "args": ["--directory", "/path/to/instagram-mcp-server", "run", "-m", "instagram_mcp_server"]
     }
   }
 }
@@ -418,8 +426,8 @@ uv run -m linkedin_mcp_server --transport streamable-http --host 127.0.0.1 --por
 
 **Login issues:**
 
-- Make sure you have only one active LinkedIn session at a time
-- LinkedIn may require a login confirmation in the LinkedIn mobile app for `--login`
+- Make sure you have only one active Instagram session at a time
+- Instagram may require a login confirmation in the Instagram mobile app for `--login`
 - You might get a captcha challenge if you logged in frequently. The `--login` command opens a browser where you can solve it manually.
 
 **Scraping issues:**
@@ -429,7 +437,7 @@ uv run -m linkedin_mcp_server --transport streamable-http --host 127.0.0.1 --por
 
 **Session issues:**
 
-- Browser profile is stored at `~/.linkedin-mcp/profile/`
+- Browser profile is stored at `~/.instagram-mcp/profile/`
 - Use `--logout` to clear the profile and start fresh
 
 **Python/Patchright issues:**
@@ -459,7 +467,7 @@ uv run -m linkedin_mcp_server --transport streamable-http --host 127.0.0.1 --por
 
 Built with [FastMCP](https://gofastmcp.com/) and [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python).
 
-Use in accordance with [LinkedIn's Terms of Service](https://www.linkedin.com/legal/user-agreement). Web scraping may violate LinkedIn's terms. This tool is for personal use only.
+Use in accordance with [Instagram's Terms of Use](https://help.instagram.com/581066165581870). Web scraping may violate Instagram's terms. This tool is for personal use only.
 
 ## License
 

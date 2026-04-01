@@ -5,10 +5,10 @@ import mcp.types as mt
 from fastmcp import FastMCP
 from fastmcp.server.middleware import MiddlewareContext
 
-from linkedin_mcp_server.sequential_tool_middleware import (
+from instagram_mcp_server.sequential_tool_middleware import (
     SequentialToolExecutionMiddleware,
 )
-from linkedin_mcp_server.server import create_mcp_server
+from instagram_mcp_server.server import create_mcp_server
 
 
 class TestSequentialToolExecutionMiddleware:

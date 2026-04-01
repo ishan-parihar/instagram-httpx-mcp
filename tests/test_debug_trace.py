@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from linkedin_mcp_server.debug_trace import (
+from instagram_mcp_server.debug_trace import (
     _safe_source_profile_dir,
     cleanup_trace_dir,
     get_trace_dir,
@@ -54,7 +54,7 @@ def test_mark_trace_for_retention_keeps_trace_dir(monkeypatch, tmp_path):
 
 def test_explicit_trace_dir_is_preserved(monkeypatch, tmp_path):
     trace_dir = tmp_path / "explicit-trace"
-    monkeypatch.setenv("LINKEDIN_DEBUG_TRACE_DIR", str(trace_dir))
+    monkeypatch.setenv("INSTAGRAM_DEBUG_TRACE_DIR", str(trace_dir))
 
     resolved = get_trace_dir()
     assert resolved == trace_dir
@@ -67,7 +67,7 @@ def test_explicit_trace_dir_is_preserved(monkeypatch, tmp_path):
 
 def test_trace_mode_off_disables_trace_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
-    monkeypatch.setenv("LINKEDIN_TRACE_MODE", "off")
+    monkeypatch.setenv("INSTAGRAM_TRACE_MODE", "off")
 
     assert get_trace_dir() is None
 
@@ -77,8 +77,8 @@ async def test_reset_trace_state_resets_step_counter(monkeypatch, tmp_path):
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
 
     page = MagicMock()
-    page.url = "https://www.linkedin.com/feed/"
-    page.title = AsyncMock(return_value="LinkedIn")
+    page.url = "https://www.instagram.com/"
+    page.title = AsyncMock(return_value="Instagram")
     page.evaluate = AsyncMock(return_value="Feed")
     locator = MagicMock()
     locator.count = AsyncMock(return_value=0)
@@ -107,8 +107,8 @@ async def test_reset_trace_state_resets_step_counter(monkeypatch, tmp_path):
 def test_safe_source_profile_dir_ignores_generic_env_fallback(monkeypatch):
     monkeypatch.setenv("USER_DATA_DIR", "/tmp/unrelated-user-data")
     monkeypatch.setattr(
-        "linkedin_mcp_server.debug_trace.get_source_profile_dir",
+        "instagram_mcp_server.debug_trace.get_source_profile_dir",
         lambda: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
-    assert _safe_source_profile_dir() == Path("~/.linkedin-mcp/profile").expanduser()
+    assert _safe_source_profile_dir() == Path("~/.instagram-mcp/profile").expanduser()

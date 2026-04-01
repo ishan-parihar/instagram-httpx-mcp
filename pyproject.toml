@@ -1,15 +1,15 @@
 [project]
-name = "linkedin-scraper-mcp"
-version = "4.8.1"
-description = "MCP server for LinkedIn profile, company, and job scraping with Claude AI integration. Supports direct profile/company/job URL scraping with secure credential storage."
+name = "instagram-scraper-mcp"
+version = "1.0.0"
+description = "MCP server for Instagram profile, posts, insights, and messaging with Claude AI integration. Supports user profiles, Business/Creator insights, search, DMs, and account actions via web scraping."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 authors = [
-    { name = "Daniel Sticker", email = "daniel@sticker.name" }
+    { name = "Ishan Patel", email = "ishan@example.com" }
 ]
 license = "Apache-2.0"
 keywords = [
-    "linkedin",
+    "instagram",
     "mcp",
     "model-context-protocol",
     "scraper",
@@ -18,6 +18,8 @@ keywords = [
     "llm",
     "anthropic",
     "claude",
+    "social-media",
+    "instagram-insights",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -39,26 +41,26 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/stickerdaniel/linkedin-mcp-server"
-Documentation = "https://github.com/stickerdaniel/linkedin-mcp-server#readme"
-Repository = "https://github.com/stickerdaniel/linkedin-mcp-server"
-Issues = "https://github.com/stickerdaniel/linkedin-mcp-server/issues"
-Changelog = "https://github.com/stickerdaniel/linkedin-mcp-server/releases"
+Homepage = "https://github.com/stickerdaniel/instagram-mcp-server"
+Documentation = "https://github.com/stickerdaniel/instagram-mcp-server#readme"
+Repository = "https://github.com/stickerdaniel/instagram-mcp-server"
+Issues = "https://github.com/stickerdaniel/instagram-mcp-server/issues"
+Changelog = "https://github.com/stickerdaniel/instagram-mcp-server/releases"
 
 [project.scripts]
-linkedin-mcp-server = "linkedin_mcp_server.cli_main:main"
-linkedin-scraper-mcp = "linkedin_mcp_server.cli_main:main"
+instagram-mcp-server = "instagram_mcp_server.cli_main:main"
+instagram-scraper-mcp = "instagram_mcp_server.cli_main:main"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["linkedin_mcp_server*"]
+include = ["instagram_mcp_server*"]
 exclude = ["assets*", "docs*", "tests*"]
 
 [tool.setuptools.package-data]
-linkedin_mcp_server = ["py.typed"]
+instagram_mcp_server = ["py.typed"]
 
 [dependency-groups]
 dev = [

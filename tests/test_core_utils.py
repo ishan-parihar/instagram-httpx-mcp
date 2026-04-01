@@ -4,15 +4,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from linkedin_mcp_server.core.exceptions import RateLimitError
-from linkedin_mcp_server.core.utils import detect_rate_limit
+from instagram_mcp_server.core.exceptions import RateLimitError
+from instagram_mcp_server.core.utils import detect_rate_limit
 
 
 @pytest.fixture
 def mock_page():
     """Create a mock Patchright page for rate-limit tests."""
     page = MagicMock()
-    page.url = "https://www.linkedin.com/in/testuser/details/experience/"
+    page.url = "https://www.instagram.com/testuser/details/experience/"
 
     mock_locator = MagicMock()
     mock_locator.count = AsyncMock(return_value=0)
@@ -23,12 +23,12 @@ def mock_page():
 
 class TestDetectRateLimit:
     async def test_checkpoint_url_raises(self, mock_page):
-        mock_page.url = "https://www.linkedin.com/checkpoint/challenge/123"
+        mock_page.url = "https://www.instagram.com/checkpoint/challenge/123"
         with pytest.raises(RateLimitError, match="security checkpoint"):
             await detect_rate_limit(mock_page)
 
     async def test_authwall_url_raises(self, mock_page):
-        mock_page.url = "https://www.linkedin.com/authwall?trk=login"
+        mock_page.url = "https://www.instagram.com/authwall?trk=login"
         with pytest.raises(RateLimitError, match="security checkpoint"):
             await detect_rate_limit(mock_page)
 

@@ -1,12 +1,12 @@
-from linkedin_mcp_server.exceptions import (
+from instagram_mcp_server.exceptions import (
     CredentialsNotFoundError,
-    LinkedInMCPError,
+    InstagramMCPError,
     SessionExpiredError,
 )
 
 
 def test_base_exception():
-    err = LinkedInMCPError("test")
+    err = InstagramMCPError("test")
     assert str(err) == "test"
 
 
@@ -21,5 +21,5 @@ def test_session_expired_custom_message():
 
 
 def test_inheritance():
-    assert issubclass(SessionExpiredError, LinkedInMCPError)
-    assert issubclass(CredentialsNotFoundError, LinkedInMCPError)
+    assert issubclass(SessionExpiredError, InstagramMCPError)
+    assert issubclass(CredentialsNotFoundError, InstagramMCPError)

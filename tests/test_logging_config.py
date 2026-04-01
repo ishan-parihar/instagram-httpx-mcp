@@ -1,7 +1,7 @@
 import logging
 
-from linkedin_mcp_server.debug_trace import get_trace_dir, reset_trace_state_for_testing
-from linkedin_mcp_server.logging_config import configure_logging, teardown_trace_logging
+from instagram_mcp_server.debug_trace import get_trace_dir, reset_trace_state_for_testing
+from instagram_mcp_server.logging_config import configure_logging, teardown_trace_logging
 
 
 def setup_function():
@@ -18,11 +18,11 @@ def test_configure_logging_registers_trace_cleanup_once(monkeypatch, tmp_path):
 
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
     monkeypatch.setattr(
-        "linkedin_mcp_server.logging_config.atexit.register",
+        "instagram_mcp_server.logging_config.atexit.register",
         lambda fn: registrations.append(fn),
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.logging_config._TRACE_CLEANUP_REGISTERED",
+        "instagram_mcp_server.logging_config._TRACE_CLEANUP_REGISTERED",
         False,
     )
 
@@ -37,11 +37,11 @@ def test_registered_trace_cleanup_removes_ephemeral_trace_dir(monkeypatch, tmp_p
 
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
     monkeypatch.setattr(
-        "linkedin_mcp_server.logging_config.atexit.register",
+        "instagram_mcp_server.logging_config.atexit.register",
         lambda fn: registrations.append(fn),
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.logging_config._TRACE_CLEANUP_REGISTERED",
+        "instagram_mcp_server.logging_config._TRACE_CLEANUP_REGISTERED",
         False,
     )
 

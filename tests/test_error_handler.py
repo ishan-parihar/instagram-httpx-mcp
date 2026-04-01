@@ -1,16 +1,16 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from linkedin_mcp_server.core.exceptions import (
+from instagram_mcp_server.core.exceptions import (
     NetworkError,
     ProfileNotFoundError,
     RateLimitError,
     ScrapingError,
 )
-from linkedin_mcp_server.error_handler import raise_tool_error
-from linkedin_mcp_server.exceptions import (
+from instagram_mcp_server.error_handler import raise_tool_error
+from instagram_mcp_server.exceptions import (
     CredentialsNotFoundError,
-    LinkedInMCPError,
+    InstagramMCPError,
     SessionExpiredError,
 )
 
@@ -45,7 +45,7 @@ def test_raises_tool_error_for_profile_not_found():
 
 def test_rate_limit_skips_issue_diagnostics(monkeypatch):
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_handler.build_issue_diagnostics",
+        "instagram_mcp_server.error_handler.build_issue_diagnostics",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("diagnostics should not run")
         ),
@@ -58,7 +58,7 @@ def test_rate_limit_skips_issue_diagnostics(monkeypatch):
 
 def test_profile_not_found_skips_issue_diagnostics(monkeypatch):
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_handler.build_issue_diagnostics",
+        "instagram_mcp_server.error_handler.build_issue_diagnostics",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("diagnostics should not run")
         ),
@@ -79,26 +79,26 @@ def test_raises_tool_error_for_scraping_error():
 
 
 def test_raises_tool_error_for_base_scraper_exception():
-    from linkedin_mcp_server.core.exceptions import LinkedInScraperException
+    from instagram_mcp_server.core.exceptions import InstagramScraperException
 
     with pytest.raises(ToolError, match="generic scraper error"):
-        raise_tool_error(LinkedInScraperException("generic scraper error"))
+        raise_tool_error(InstagramScraperException("generic scraper error"))
 
 
-def test_raises_tool_error_for_linkedin_mcp_error():
+def test_raises_tool_error_for_instagram_mcp_error():
     with pytest.raises(ToolError, match="custom mcp error"):
-        raise_tool_error(LinkedInMCPError("custom mcp error"))
+        raise_tool_error(InstagramMCPError("custom mcp error"))
 
 
 def test_raises_tool_error_for_authentication_error():
-    from linkedin_mcp_server.core.exceptions import AuthenticationError
+    from instagram_mcp_server.core.exceptions import AuthenticationError
 
     with pytest.raises(ToolError, match="Authentication failed"):
         raise_tool_error(AuthenticationError("bad creds"))
 
 
 def test_raises_tool_error_for_element_not_found():
-    from linkedin_mcp_server.core.exceptions import ElementNotFoundError
+    from instagram_mcp_server.core.exceptions import ElementNotFoundError
 
     with pytest.raises(ToolError, match="Element not found"):
         raise_tool_error(ElementNotFoundError("missing"))

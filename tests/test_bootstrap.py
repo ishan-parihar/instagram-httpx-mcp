@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from linkedin_mcp_server.bootstrap import (
+from instagram_mcp_server.bootstrap import (
     AuthState,
     _force_move_auth_state_aside,
     ensure_tool_ready_or_raise,
@@ -19,13 +19,13 @@ from linkedin_mcp_server.bootstrap import (
     SetupState,
     start_background_browser_setup_if_needed,
 )
-from linkedin_mcp_server.exceptions import (
+from instagram_mcp_server.exceptions import (
     AuthenticationInProgressError,
     AuthenticationStartedError,
     BrowserSetupInProgressError,
     DockerHostLoginRequiredError,
 )
-from linkedin_mcp_server.session_state import (
+from instagram_mcp_server.session_state import (
     portable_cookie_path,
     source_state_path,
 )
@@ -37,10 +37,10 @@ class TestBootstrap:
             return None
 
         monkeypatch.setattr(
-            "linkedin_mcp_server.bootstrap.browser_setup_ready", lambda: False
+            "instagram_mcp_server.bootstrap.browser_setup_ready", lambda: False
         )
         monkeypatch.setattr(
-            "linkedin_mcp_server.bootstrap._run_browser_setup", fake_setup
+            "instagram_mcp_server.bootstrap._run_browser_setup", fake_setup
         )
 
         initialize_bootstrap("managed")
@@ -58,32 +58,32 @@ class TestBootstrap:
         state.setup_task = MagicMock(done=lambda: False)
 
         with pytest.raises(BrowserSetupInProgressError):
-            await ensure_tool_ready_or_raise("search_jobs")
+            await ensure_tool_ready_or_raise("search_posts")
 
     async def test_missing_auth_starts_login(self, monkeypatch):
         async def fake_start_login(ctx=None) -> None:
             raise AuthenticationStartedError(
-                "No valid LinkedIn session was found. A login browser window has been opened. Sign in with your LinkedIn credentials there, then retry this tool."
+                "No valid Instagram session was found. A login browser window has been opened. Sign in with your Instagram credentials there, then retry this tool."
             )
 
         monkeypatch.setattr(
-            "linkedin_mcp_server.bootstrap.browser_setup_ready", lambda: True
+            "instagram_mcp_server.bootstrap.browser_setup_ready", lambda: True
         )
-        monkeypatch.setattr("linkedin_mcp_server.bootstrap._auth_ready", lambda: False)
+        monkeypatch.setattr("instagram_mcp_server.bootstrap._auth_ready", lambda: False)
         monkeypatch.setattr(
-            "linkedin_mcp_server.bootstrap._start_login_if_needed", fake_start_login
+            "instagram_mcp_server.bootstrap._start_login_if_needed", fake_start_login
         )
 
         initialize_bootstrap("managed")
 
         with pytest.raises(AuthenticationStartedError):
-            await ensure_tool_ready_or_raise("get_person_profile")
+            await ensure_tool_ready_or_raise("get_user_profile")
 
     async def test_login_in_progress_reuses_existing_session(self, monkeypatch):
         monkeypatch.setattr(
-            "linkedin_mcp_server.bootstrap.browser_setup_ready", lambda: True
+            "instagram_mcp_server.bootstrap.browser_setup_ready", lambda: True
         )
-        monkeypatch.setattr("linkedin_mcp_server.bootstrap._auth_ready", lambda: False)
+        monkeypatch.setattr("instagram_mcp_server.bootstrap._auth_ready", lambda: False)
 
         initialize_bootstrap("managed")
         state = get_bootstrap_state()
@@ -91,13 +91,13 @@ class TestBootstrap:
         state.login_task = MagicMock(done=lambda: False)
 
         with pytest.raises(AuthenticationInProgressError):
-            await ensure_tool_ready_or_raise("get_person_profile")
+            await ensure_tool_ready_or_raise("get_user_profile")
 
     async def test_docker_requires_host_login(self, monkeypatch):
-        monkeypatch.setattr("linkedin_mcp_server.bootstrap._auth_ready", lambda: False)
+        monkeypatch.setattr("instagram_mcp_server.bootstrap._auth_ready", lambda: False)
         initialize_bootstrap("docker")
         with pytest.raises(DockerHostLoginRequiredError):
-            await ensure_tool_ready_or_raise("search_jobs")
+            await ensure_tool_ready_or_raise("search_posts")
 
     def test_reset_bootstrap_clears_state(self):
         initialize_bootstrap("managed")
@@ -140,7 +140,7 @@ class TestBootstrap:
         state.setup_task = task
 
         with pytest.raises(BrowserSetupInProgressError):
-            await ensure_tool_ready_or_raise("search_jobs")
+            await ensure_tool_ready_or_raise("search_posts")
 
         assert state.setup_state is SetupState.RUNNING
         assert state.setup_task is not None
@@ -165,7 +165,7 @@ def _make_auth_ready(profile_dir):
     (profile_dir / "Default" / "Cookies").write_text("placeholder")
     cookie_path = portable_cookie_path(profile_dir)
     cookie_path.parent.mkdir(parents=True, exist_ok=True)
-    cookie_path.write_text(json.dumps([{"name": "li_at", "domain": ".linkedin.com"}]))
+    cookie_path.write_text(json.dumps([{"name": "sessionid", "domain": ".instagram.com"}]))
     source_state_path(profile_dir).write_text(
         json.dumps(
             {
@@ -191,7 +191,7 @@ class TestInvalidateAuthAndTriggerRelogin:
             return None
 
         monkeypatch.setattr(
-            "linkedin_mcp_server.bootstrap._run_login_flow", fake_login_flow
+            "instagram_mcp_server.bootstrap._run_login_flow", fake_login_flow
         )
         initialize_bootstrap("managed")
 
@@ -230,7 +230,7 @@ class TestInvalidateAuthAndTriggerRelogin:
         _make_auth_ready(isolate_profile_dir)
 
         # Confirm _auth_ready() would return True before the move.
-        from linkedin_mcp_server.bootstrap import _auth_ready
+        from instagram_mcp_server.bootstrap import _auth_ready
 
         assert _auth_ready()
 

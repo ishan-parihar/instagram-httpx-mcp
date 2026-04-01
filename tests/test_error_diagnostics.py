@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from linkedin_mcp_server.error_diagnostics import (
+from instagram_mcp_server.error_diagnostics import (
     _installation_method_lines,
     _installation_method_summary,
     build_issue_diagnostics,
@@ -39,12 +39,12 @@ def _required_issue_form_labels() -> list[str]:
 def test_build_issue_diagnostics_includes_existing_issues(monkeypatch, tmp_path):
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_diagnostics._find_existing_issues",
+        "instagram_mcp_server.error_diagnostics._find_existing_issues",
         lambda payload: [
             {
                 "number": 220,
                 "title": "[BUG] recent-activity redirect loop in posts on linux-arm64-container",
-                "url": "https://github.com/stickerdaniel/linkedin-mcp-server/issues/220",
+                "url": "https://github.com/stickerdaniel/instagram-mcp-server/issues/220",
             }
         ],
     )
@@ -52,7 +52,7 @@ def test_build_issue_diagnostics_includes_existing_issues(monkeypatch, tmp_path)
     diagnostics = build_issue_diagnostics(
         RuntimeError("boom"),
         context="extract-page",
-        target_url="https://www.linkedin.com/in/williamhgates/recent-activity/all/",
+        target_url="https://www.instagram.com/williamhgates/recent-activity/all/",
         section_name="posts",
     )
 
@@ -79,7 +79,7 @@ def test_format_tool_error_with_diagnostics_prefers_existing_issue_comment_flow(
             {
                 "number": 220,
                 "title": "[BUG] recent-activity redirect loop in posts on linux-arm64-container",
-                "url": "https://github.com/stickerdaniel/linkedin-mcp-server/issues/220",
+                "url": "https://github.com/stickerdaniel/instagram-mcp-server/issues/220",
             }
         ],
         "runtime": {
@@ -105,14 +105,14 @@ def test_find_existing_issues_query_failure_is_tolerated(monkeypatch, tmp_path):
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
 
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_diagnostics.urlopen",
+        "instagram_mcp_server.error_diagnostics.urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("no network")),
     )
 
     diagnostics = build_issue_diagnostics(
         RuntimeError("boom"),
         context="extract-page",
-        target_url="https://www.linkedin.com/in/test/",
+        target_url="https://www.instagram.com/test/",
         section_name="main_profile",
     )
 
@@ -125,14 +125,14 @@ def test_build_issue_diagnostics_omits_missing_server_log_from_gist(
 ):
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_diagnostics._find_existing_issues",
+        "instagram_mcp_server.error_diagnostics._find_existing_issues",
         lambda payload: [],
     )
 
     diagnostics = build_issue_diagnostics(
         RuntimeError("boom"),
         context="extract-page",
-        target_url="https://www.linkedin.com/in/test/",
+        target_url="https://www.instagram.com/test/",
         section_name="main_profile",
     )
 
@@ -152,12 +152,12 @@ async def test_build_issue_diagnostics_skips_network_search_in_event_loop(
         called["value"] = True
         raise AssertionError("urlopen should not be called inside the event loop")
 
-    monkeypatch.setattr("linkedin_mcp_server.error_diagnostics.urlopen", fail)
+    monkeypatch.setattr("instagram_mcp_server.error_diagnostics.urlopen", fail)
 
     diagnostics = build_issue_diagnostics(
         RuntimeError("boom"),
         context="extract-page",
-        target_url="https://www.linkedin.com/in/test/",
+        target_url="https://www.instagram.com/test/",
         section_name="main_profile",
     )
 
@@ -173,14 +173,14 @@ def test_build_issue_diagnostics_covers_required_bug_report_fields(
 ):
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_diagnostics._find_existing_issues",
+        "instagram_mcp_server.error_diagnostics._find_existing_issues",
         lambda payload: [],
     )
 
     diagnostics = build_issue_diagnostics(
         RuntimeError("boom"),
-        context="search_jobs",
-        target_url="https://www.linkedin.com/jobs/search/?keywords=python",
+        context="search_posts",
+        target_url="https://www.instagram.com/explore/search/?keywords=python",
         section_name="search_results",
     )
 
@@ -193,8 +193,8 @@ def test_build_issue_diagnostics_covers_required_bug_report_fields(
     assert "- MCP client:" in issue_body
     assert "- Error:" in issue_body
     assert "- Expected behavior:" in issue_body
-    assert "1. Run a fresh local `uv run -m linkedin_mcp_server --login`." in issue_body
-    assert "Call `search_jobs` again" in issue_body
+    assert "1. Run a fresh local `uv run -m instagram_mcp_server --login`." in issue_body
+    assert "Call `search_users` again" in issue_body
     assert "## Additional Diagnostics" in issue_body
     assert "### Session State" in issue_body
 
@@ -204,26 +204,26 @@ def test_build_issue_diagnostics_marks_inferred_tool_and_container_runtime(
 ):
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_diagnostics.get_runtime_id",
+        "instagram_mcp_server.error_diagnostics.get_runtime_id",
         lambda: "linux-amd64-container",
     )
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_diagnostics._find_existing_issues",
+        "instagram_mcp_server.error_diagnostics._find_existing_issues",
         lambda payload: [],
     )
 
     diagnostics = build_issue_diagnostics(
         RuntimeError("boom"),
-        context="search_jobs",
-        target_url="https://www.linkedin.com/jobs/search/?keywords=python",
+        context="search_posts",
+        target_url="https://www.instagram.com/explore/search/?keywords=python",
         section_name="search_results",
     )
 
     issue_body = Path(diagnostics["issue_template_path"]).read_text()
     assert "- Installation method: Docker using" in issue_body
-    assert "`~/.linkedin-mcp` mounted into `/home/pwuser/.linkedin-mcp`" in issue_body
+    assert "`~/.instagram-mcp` mounted into `/home/pwuser/.instagram-mcp`" in issue_body
     assert "- [x] Docker" in issue_body
-    assert "- Tool: search_jobs" in issue_body
+    assert "- Tool: search_users" in issue_body
 
 
 def test_installation_method_lines_marks_managed_runtime() -> None:
@@ -260,14 +260,14 @@ def test_build_issue_diagnostics_keeps_sensitive_runtime_details_out_of_mcp_payl
 ):
     monkeypatch.setenv("USER_DATA_DIR", str(tmp_path / "profile"))
     monkeypatch.setattr(
-        "linkedin_mcp_server.error_diagnostics._find_existing_issues",
+        "instagram_mcp_server.error_diagnostics._find_existing_issues",
         lambda payload: [],
     )
 
     diagnostics = build_issue_diagnostics(
         RuntimeError("boom"),
         context="extract-page",
-        target_url="https://www.linkedin.com/in/test/",
+        target_url="https://www.instagram.com/test/",
         section_name="main_profile",
     )
 

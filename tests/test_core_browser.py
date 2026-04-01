@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from linkedin_mcp_server.core.browser import BrowserManager
+from instagram_mcp_server.core.browser import BrowserManager
 
 
 def _make_cookie(
     name: str,
     value: str = "value",
     *,
-    domain: str = ".linkedin.com",
+    domain: str = ".instagram.com",
 ) -> dict[str, str]:
     return {
         "name": name,
@@ -37,13 +37,13 @@ async def test_import_cookies_imports_bridge_subset_only(tmp_path):
     browser, context = _make_browser_manager(tmp_path)
     cookie_path = tmp_path / "cookies.json"
     cookies = [
-        _make_cookie("li_at"),
-        _make_cookie("JSESSIONID"),
-        _make_cookie("bcookie"),
-        _make_cookie("bscookie"),
-        _make_cookie("lidc"),
+        _make_cookie("sessionid"),
+        _make_cookie("csrftoken"),
+        _make_cookie("ds_user_id"),
+        _make_cookie("ig_did"),
+        _make_cookie("mid"),
         _make_cookie("session", domain=".example.com"),
-        _make_cookie("timezone"),
+        _make_cookie("ig_cb"),
     ]
     cookie_path.write_text(json.dumps(cookies))
 
@@ -52,7 +52,7 @@ async def test_import_cookies_imports_bridge_subset_only(tmp_path):
     assert imported is True
     context.clear_cookies.assert_not_awaited()
     context.add_cookies.assert_awaited_once_with(
-        [cookies[0], cookies[1], cookies[2], cookies[3], cookies[4]]
+        [cookies[0], cookies[1]]
     )
 
 
@@ -61,32 +61,32 @@ async def test_import_cookies_uses_bridge_core_debug_preset(tmp_path, monkeypatc
     browser, context = _make_browser_manager(tmp_path)
     cookie_path = tmp_path / "cookies.json"
     cookies = [
-        _make_cookie("li_at"),
-        _make_cookie("JSESSIONID"),
-        _make_cookie("bcookie"),
-        _make_cookie("bscookie"),
-        _make_cookie("lidc"),
-        _make_cookie("liap"),
-        _make_cookie("timezone"),
+        _make_cookie("sessionid"),
+        _make_cookie("csrftoken"),
+        _make_cookie("ds_user_id"),
+        _make_cookie("ig_did"),
+        _make_cookie("mid"),
+        _make_cookie("ig_cb"),
     ]
     cookie_path.write_text(json.dumps(cookies))
-    monkeypatch.setenv("LINKEDIN_DEBUG_BRIDGE_COOKIE_SET", "bridge_core")
+    monkeypatch.setenv("INSTAGRAM_DEBUG_COOKIE_SET", "auth_core")
 
     imported = await browser.import_cookies(cookie_path)
 
     assert imported is True
-    context.add_cookies.assert_awaited_once_with(cookies)
+    # auth_core imports only: sessionid, csrftoken, ds_user_id, ig_did, mid
+    context.add_cookies.assert_awaited_once_with(cookies[:5])
 
 
 @pytest.mark.asyncio
-async def test_import_cookies_requires_li_at(tmp_path):
+async def test_import_cookies_requires_sessionid(tmp_path):
     browser, context = _make_browser_manager(tmp_path)
     cookie_path = tmp_path / "cookies.json"
     cookie_path.write_text(
         json.dumps(
             [
-                _make_cookie("JSESSIONID"),
-                _make_cookie("bcookie"),
+                _make_cookie("csrftoken"),
+                _make_cookie("ds_user_id"),
             ]
         )
     )
@@ -105,9 +105,9 @@ async def test_import_cookies_preserves_existing_cookies(tmp_path):
     cookie_path.write_text(
         json.dumps(
             [
-                _make_cookie("li_at"),
-                _make_cookie("li_rm"),
-                _make_cookie("JSESSIONID"),
+                _make_cookie("sessionid"),
+                _make_cookie("shbts"),
+                _make_cookie("csrftoken"),
             ]
         )
     )
