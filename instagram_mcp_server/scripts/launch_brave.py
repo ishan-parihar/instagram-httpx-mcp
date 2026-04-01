@@ -2,6 +2,8 @@
 Launch Brave browser with remote debugging enabled.
 
 This script helps users start Brave in the correct mode for CDP connection.
+It connects to your EXISTING Brave profile - do NOT use if you want to keep
+your current Instagram session separate.
 """
 
 import logging
@@ -22,7 +24,6 @@ BRAVE_PATHS = [
 ]
 
 DEBUGGING_PORT = 9222
-USER_DATA_DIR = Path.home() / ".instagram-mcp" / "brave-profile"
 
 
 def find_brave_executable() -> Path | None:
@@ -45,8 +46,43 @@ def find_brave_executable() -> Path | None:
     return None
 
 
+def find_existing_brave() -> int | None:
+    """Find existing Brave process (any)."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "brave"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            pids = result.stdout.strip().split("\n")
+            return int(pids[0]) if pids else None
+        return None
+    except (subprocess.SubprocessError, ValueError, FileNotFoundError):
+        return None
+
+
+def find_brave_with_debugging() -> int | None:
+    """Find Brave process with remote debugging enabled."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-af", "brave.*remote-debugging-port"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            lines = result.stdout.strip().split("\n")
+            for line in lines:
+                parts = line.split()
+                if parts and parts[0].isdigit():
+                    return int(parts[0])
+        return None
+    except (subprocess.SubprocessError, ValueError, FileNotFoundError):
+        return None
+
+
 def launch_brave() -> int:
-    """Launch Brave with remote debugging enabled."""
+    """Launch Brave with remote debugging enabled using DEFAULT profile."""
     brave_exe = find_brave_executable()
 
     if not brave_exe:
@@ -57,18 +93,45 @@ def launch_brave() -> int:
         print("  Or download from: https://brave.com")
         return 1
 
+    # Check if Brave is already running with debugging
+    existing_debug = find_brave_with_debugging()
+    if existing_debug:
+        print(
+            f"✓ Brave is already running with remote debugging (PID: {existing_debug})"
+        )
+        print(f"\nNow run the MCP server:")
+        print(f"  uv run -m instagram_mcp_server")
+        return 0
+
+    # Check if Brave is running without debugging
+    existing_brave = find_existing_brave()
+    if existing_brave:
+        print(
+            f"⚠ Brave is already running (PID: {existing_brave}) but without remote debugging."
+        )
+        print("\nTo use CDP mode, you need to restart Brave with remote debugging.")
+        print("\nOption 1: Quick restart (closes all Brave windows)")
+        print("  Run: pkill brave && sleep 2 && uv run instagram-launch-brave")
+        print("\nOption 2: Manual restart (keeps your session)")
+        print("  1. Save your work and close Brave manually")
+        print("  2. Run: brave-browser --remote-debugging-port=9222")
+        print("\nOption 3: Add flag permanently")
+        print(
+            "  Edit your Brave desktop shortcut to include: --remote-debugging-port=9222"
+        )
+        return 1
+
     print(f"Found Brave: {brave_exe}")
     print(f"Launching with remote debugging on port {DEBUGGING_PORT}...")
-    print(f"Profile directory: {USER_DATA_DIR}")
-    print("\nPlease log into Instagram in the Brave window.")
+    print("\n⚠ IMPORTANT: This uses your DEFAULT Brave profile.")
+    print("   Your existing Instagram session (if logged in) will be available.")
+    print("\nPlease log into Instagram if not already logged in.")
     print("Press Ctrl+C to stop.")
 
-    USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-
+    # Launch WITHOUT --user-data-dir to use default profile
     cmd = [
         str(brave_exe),
         f"--remote-debugging-port={DEBUGGING_PORT}",
-        f"--user-data-dir={USER_DATA_DIR}",
         "--no-first-run",
         "--no-default-browser-check",
         "https://www.instagram.com/",
@@ -81,7 +144,7 @@ def launch_brave() -> int:
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
-        print("\n✓ Brave launched successfully!")
+        print("\n✓ Brave launched successfully with your default profile!")
         print(f"\nNow run the MCP server:")
         print(f"  uv run -m instagram_mcp_server")
         return 0

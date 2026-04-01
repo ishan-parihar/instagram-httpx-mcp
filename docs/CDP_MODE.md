@@ -35,9 +35,20 @@ This will:
 - Find your Brave browser installation
 - Launch with remote debugging on port 9222
 - Open Instagram automatically
-- Create a dedicated profile at `~/.instagram-mcp/brave-profile`
+- **Use your DEFAULT Brave profile** (all your existing bookmarks, extensions, and logins)
 
-**Option B: Manual launch**
+> [!IMPORTANT]
+> The launcher uses your existing Brave profile - do NOT use if you want to keep your Instagram session separate from your daily browsing.
+
+**Option B: Manual launch (uses default profile)**
+
+```bash
+brave-browser --remote-debugging-port=9222 https://www.instagram.com/
+```
+
+**Option C: Manual launch (separate profile)**
+
+If you want a separate profile just for Instagram MCP:
 
 ```bash
 brave-browser \
@@ -46,12 +57,14 @@ brave-browser \
   https://www.instagram.com/
 ```
 
-**Option C: Add to Brave desktop shortcut**
+**Option D: Add to Brave desktop shortcut**
 
-Edit your Brave launcher to include:
+For permanent setup, edit your Brave launcher to include:
 ```
---remote-debugging-port=9222 --user-data-dir=~/.instagram-mcp/brave-profile
+--remote-debugging-port=9222
 ```
+
+This will enable CDP mode for all Brave sessions. You can remove it later if needed.
 
 ### Step 2: Log Into Instagram
 

@@ -22,15 +22,27 @@ Through this Instagram MCP server, AI assistants like Claude can connect to your
 
 ### Quick Start
 
-```bash
-# 1. Launch Brave with remote debugging
-uv run instagram-launch-brave
+**First time setup:**
 
-# 2. Log into Instagram in the Brave window that opens
+```bash
+# 1. Close all Brave windows, then launch with remote debugging
+pkill brave && sleep 2 && uv run instagram-launch-brave
+
+# 2. Log into Instagram in the Brave window (if not already logged in)
 
 # 3. Run the MCP server (automatically connects to Brave)
 uv run -m instagram_mcp_server
 ```
+
+**Subsequent runs:**
+
+Once Brave is running with `--remote-debugging-port=9222`, just run:
+
+```bash
+uv run -m instagram_mcp_server
+```
+
+Your Instagram session persists across MCP server restarts.
 
 ### Benefits
 
