@@ -28,6 +28,7 @@ from instagram_mcp_server.tools.search import register_search_tools
 from instagram_mcp_server.tools.insights import register_insights_tools
 from instagram_mcp_server.tools.actions import register_action_tools
 from instagram_mcp_server.tools.messaging import register_messaging_tools
+from instagram_mcp_server.tools.transcription import register_transcription_tools
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ def create_mcp_server() -> FastMCP:
     register_messaging_tools(mcp)
     register_search_tools(mcp)
     register_action_tools(mcp)
+    register_transcription_tools(mcp)
 
     # Register session management tool
     @mcp.tool(

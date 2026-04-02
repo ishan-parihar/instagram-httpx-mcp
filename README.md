@@ -122,9 +122,13 @@ Search for trending hashtags related to #travel
 | `unlike_post` | Unlike a post/reel | ✅ Working | 3-5s |
 | `save_post` | Save a post/reel | ✅ Working | 3-5s |
 | `comment_on_post` | Comment on a post/reel | ✅ Working | 3-5s |
+| **Transcription** | | | |
+| `transcribe_user_reels` | Download & transcribe reels to SRT subtitles | ✅ Working³ | 30-60s/reel |
+| `transcribe_reel` | Transcribe single reel by URL | ✅ Working³ | 30-60s |
 
 > ¹ Requires Business or Creator account  
 > ² Instagram blocks direct URL access to search pages - use Instagram web interface instead  
+> ³ Requires `caption` command (Whisper transcription) - see docs/TRANSCRIPTION.md  
 >
 > **Performance:** Average tool execution is **10.6s** (60-70% faster than v1.0.9) after timeout optimizations.
 
