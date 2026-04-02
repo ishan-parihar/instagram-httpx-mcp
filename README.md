@@ -148,13 +148,17 @@ Search for trending hashtags related to #travel
 <br/>
 <br/>
 
-## 🚀 uvx Setup (Recommended - Universal)
+## 🚀 Quick Start (5 minutes)
 
-**Prerequisites:** [Install uv](https://docs.astral.sh/uv/getting-started/installation/).
+### 1. Install uv
 
-### Installation
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-**Client Configuration**
+### 2. Configure MCP Client
+
+**Claude Desktop** (`claude_desktop_config.json`):
 
 ```json
 {
@@ -167,12 +171,40 @@ Search for trending hashtags related to #travel
 }
 ```
 
-The server starts quickly, prepares the shared Patchright Chromium browser cache in the background under `~/.instagram-mcp/patchright-browsers`, and opens an Instagram login browser window on the first tool call that needs authentication.
+**Other MCP Clients:**
 
-> [!NOTE]
-> Early tool calls may return a setup/authentication-in-progress error until browser setup or login finishes. If you prefer to create a session explicitly, run `uvx instagram-scraper-mcp --login`.
+```json
+{
+  "mcpServers": {
+    "instagram": {
+      "command": "uv",
+      "args": ["run", "-m", "instagram_mcp_server"]
+    }
+  }
+}
+```
 
-### uvx Setup Help
+### 3. First-Time Login (CDP Mode)
+
+```bash
+# 1. Close all Brave windows
+pkill brave && sleep 2
+
+# 2. Launch Brave with remote debugging
+uv run instagram-launch-brave
+
+# 3. Log into Instagram in the Brave window
+
+# 4. Run MCP server (automatically connects)
+uv run -m instagram_mcp_server
+```
+
+**Done!** See [docs/MCP_SETUP.md](docs/MCP_SETUP.md) for full setup guide.
+
+<br/>
+<br/>
+
+## 📋 MCP Configuration Reference
 
 <details>
 <summary><b>🔧 Configuration</b></summary>

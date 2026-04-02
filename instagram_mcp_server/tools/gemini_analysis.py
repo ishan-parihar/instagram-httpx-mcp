@@ -21,8 +21,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configure Gemini
-GEMINI_API_KEY = "REDACTED_GOOGLE_API_KEY_1"
-genai.configure(api_key=GEMINI_API_KEY)
+# Get your API key from: https://aistudio.google.com/app/apikey
+# Can also set via environment variable: GEMINI_API_KEY
+GEMINI_API_KEY = (
+    "YOUR_API_KEY_HERE"  # Replace with valid key or set GEMINI_API_KEY env var
+)
 
 # Analysis directory
 ANALYSIS_DIR = Path.home() / ".instagram-mcp" / "gemini_analysis"
@@ -40,6 +43,22 @@ async def download_video_bytes(video_url: str) -> bytes | None:
     except Exception as e:
         logger.error(f"Download error: {e}")
         return None
+
+
+def get_gemini_api_key() -> str:
+    """Get Gemini API key from config or environment."""
+    import os
+
+    env_key = os.environ.get("GEMINI_API_KEY")
+    if env_key and env_key != "YOUR_API_KEY_HERE":
+        return env_key
+    if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_API_KEY_HERE":
+        return GEMINI_API_KEY
+    raise ValueError(
+        "Gemini API key not configured. "
+        "Set GEMINI_API_KEY environment variable or edit gemini_analysis.py. "
+        "Get key from: https://aistudio.google.com/app/apikey"
+    )
 
 
 async def analyze_with_gemini(
@@ -61,6 +80,9 @@ async def analyze_with_gemini(
         Structured analysis results
     """
     try:
+        api_key = get_gemini_api_key()
+        genai.configure(api_key=api_key)
+
         model = genai.GenerativeModel("gemini-2.0-flash")
 
         # Build prompt based on analysis type
