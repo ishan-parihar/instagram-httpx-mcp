@@ -23,10 +23,11 @@ INSIGHTS_SECTIONS: dict[str, tuple[str, bool]] = {
 }
 
 # Search sections
+# Instagram search uses client-side routing - these URLs may require being logged in
 SEARCH_SECTIONS: dict[str, tuple[str, bool]] = {
-    "users": ("/explore/search/top/?q=", False),
-    "hashtags": ("/explore/search/top/?q=", False),
-    "locations": ("/explore/search/locations/?q=", False),
+    "users": ("/web/search/top/?q=", False),
+    "hashtags": ("/web/search/top/?q=%23", False),
+    "locations": ("/web/search/locations/?q=", False),
 }
 
 

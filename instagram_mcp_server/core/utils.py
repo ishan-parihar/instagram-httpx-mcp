@@ -66,7 +66,7 @@ async def detect_rate_limit(page: Page) -> None:
 
 
 async def scroll_to_bottom(
-    page: Page, pause_time: float = 1.0, max_scrolls: int = 10
+    page: Page, pause_time: float = 0.5, max_scrolls: int = 6
 ) -> None:
     """Scroll to the bottom of the page to trigger lazy loading.
 
@@ -87,7 +87,7 @@ async def scroll_to_bottom(
 
 
 async def scroll_job_sidebar(
-    page: Page, pause_time: float = 1.0, max_scrolls: int = 10
+    page: Page, pause_time: float = 0.5, max_scrolls: int = 6
 ) -> None:
     """Scroll the job search sidebar to load all job cards.
 

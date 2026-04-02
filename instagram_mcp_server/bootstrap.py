@@ -509,87 +509,169 @@ async def _cdp_login_flow() -> bool:
     """Guide user through CDP mode login.
 
     Returns:
-        True if Brave is running with CDP, False otherwise
+        True if login was successful, False otherwise
     """
-    from instagram_mcp_server.drivers.brave_cdp import find_brave_process
+    from instagram_mcp_server.drivers.brave_cdp import (
+        connect_to_brave,
+        find_brave_process,
+        verify_instagram_session,
+    )
+    from instagram_mcp_server.session_state import (
+        portable_cookie_path,
+        write_source_state,
+    )
 
     # Check if Brave is already running with CDP
-    if find_brave_process():
-        logger.info("Brave is already running with CDP")
-        return True
+    brave_running = find_brave_process()
 
-    # Try to auto-launch Brave
+    if not brave_running:
+        # Try to auto-launch Brave
+        print("\n" + "=" * 60)
+        print("CDP MODE: Launching Brave browser...")
+        print("=" * 60)
+
+        try:
+            import subprocess
+            import sys
+
+            # Find Brave executable
+            brave_paths = [
+                "/opt/brave-bin/brave",
+                "/usr/bin/brave-browser",
+                "/usr/bin/brave",
+            ]
+            brave_exe = None
+            for path in brave_paths:
+                import os
+
+                if os.path.exists(path):
+                    brave_exe = path
+                    break
+
+            if brave_exe:
+                print(f"\nAuto-launching Brave: {brave_exe}")
+                subprocess.Popen(
+                    [
+                        brave_exe,
+                        "--remote-debugging-port=9222",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                        "https://www.instagram.com/",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                print("✓ Brave launched! Waiting for it to be ready...")
+            else:
+                print("\n⚠ Brave browser not found at standard locations.")
+                print("\nPlease launch Brave manually:")
+                print("  brave-browser --remote-debugging-port=9222")
+
+        except Exception as e:
+            logger.debug(f"Failed to auto-launch Brave: {e}")
+            print("\n⚠ Could not auto-launch Brave.")
+            print("\nPlease launch Brave manually:")
+            print("  uv run instagram-launch-brave")
+            print("  OR")
+            print("  brave-browser --remote-debugging-port=9222")
+
+        # Wait for Brave to start (poll for 2 minutes)
+        import asyncio
+
+        print("\nWaiting for Brave to start with remote debugging...")
+        for i in range(24):  # 2 minutes, check every 5 seconds
+            await asyncio.sleep(5)
+            if find_brave_process():
+                print("✓ Brave detected! Continuing...")
+                brave_running = True
+                break
+            if i % 3 == 0:  # Print reminder every 15 seconds
+                print(f"  Still waiting... ({(i + 1) * 5}s elapsed)")
+
+        if not brave_running:
+            print("\n" + "=" * 60)
+            print("⚠ TIMEOUT: Brave not detected after 2 minutes")
+            print("=" * 60)
+            print("\nCDP mode requires Brave to be running with remote debugging.")
+            print("\nTo fix this:")
+            print("  1. Launch Brave: uv run instagram-launch-brave")
+            print("  2. Or manually: brave-browser --remote-debugging-port=9222")
+            print("  3. Log into Instagram in that browser window")
+            print("  4. Retry the Instagram tool")
+            print("\nAlternatively, disable CDP mode (not recommended):")
+            print("  uv run -m instagram_mcp_server --no-cdp")
+            return False
+
+    # Brave is running - connect and verify/export session
     print("\n" + "=" * 60)
-    print("CDP MODE: Launching Brave browser...")
+    print("CDP MODE: Connecting to Brave browser...")
     print("=" * 60)
 
     try:
-        import subprocess
-        import sys
+        browser = await connect_to_brave()
+    except Exception as e:
+        logger.error(f"Failed to connect to Brave: {e}")
+        print("\n⚠ Failed to connect to Brave browser.")
+        print(f"   Error: {e}")
+        print("\nMake sure Brave is running with --remote-debugging-port=9222")
+        return False
 
-        # Find Brave executable
-        brave_paths = [
-            "/opt/brave-bin/brave",
-            "/usr/bin/brave-browser",
-            "/usr/bin/brave",
-        ]
-        brave_exe = None
-        for path in brave_paths:
-            import os
+    try:
+        # Verify Instagram session exists
+        print("\nVerifying Instagram session...")
+        has_session = await verify_instagram_session(browser)
 
-            if os.path.exists(path):
-                brave_exe = path
-                break
+        if not has_session:
+            print("\n" + "=" * 60)
+            print("⚠ NOT LOGGED IN: No Instagram session found in Brave")
+            print("=" * 60)
+            print("\nPlease log into Instagram in the Brave browser window:")
+            print("  1. Navigate to https://www.instagram.com/")
+            print("  2. Log in with your credentials")
+            print("  3. Retry the Instagram tool to export the session")
+            return False
 
-        if brave_exe:
-            print(f"\nAuto-launching Brave: {brave_exe}")
-            subprocess.Popen(
-                [
-                    brave_exe,
-                    "--remote-debugging-port=9222",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                    "https://www.instagram.com/",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            print("✓ Brave launched! Waiting for it to be ready...")
+        # Export cookies from CDP session
+        profile_dir = get_profile_dir()
+        cookie_path = portable_cookie_path(profile_dir)
+
+        print(f"\nExporting cookies to {cookie_path}...")
+
+        # Get the first context (or create one if needed)
+        if not browser.contexts:
+            context = await browser.new_context()
         else:
-            print("\n⚠ Brave browser not found at standard locations.")
-            print("\nPlease launch Brave manually:")
-            print("  brave-browser --remote-debugging-port=9222")
+            context = browser.contexts[0]
+
+        # Export cookies
+        cookies = await context.cookies()
+        import json
+        from instagram_mcp_server.common_utils import secure_write_text
+
+        secure_write_text(cookie_path, json.dumps(cookies, indent=2))
+        print(f"✓ Exported {len(cookies)} cookies")
+
+        # Write source state
+        print("Writing source state metadata...")
+        source_state = write_source_state(profile_dir)
+        print(f"✓ Source session generation: {source_state.login_generation}")
+
+        print("\n" + "=" * 60)
+        print("✓ CDP MODE READY: Instagram session exported successfully")
+        print("=" * 60)
+        print(f"\nProfile saved to {profile_dir}")
+        print("You can now use all Instagram MCP tools.")
+        return True
 
     except Exception as e:
-        logger.debug(f"Failed to auto-launch Brave: {e}")
-        print("\n⚠ Could not auto-launch Brave.")
-        print("\nPlease launch Brave manually:")
-        print("  uv run instagram-launch-brave")
-        print("  OR")
-        print("  brave-browser --remote-debugging-port=9222")
-
-    # Wait for Brave to start (poll for 2 minutes)
-    import asyncio
-
-    print("\nWaiting for Brave to start with remote debugging...")
-    for i in range(24):  # 2 minutes, check every 5 seconds
-        await asyncio.sleep(5)
-        if find_brave_process():
-            print("✓ Brave detected! Continuing...")
-            return True
-        if i % 3 == 0:  # Print reminder every 15 seconds
-            print(f"  Still waiting... ({(i + 1) * 5}s elapsed)")
-
-    print("\n" + "=" * 60)
-    print("⚠ TIMEOUT: Brave not detected after 2 minutes")
-    print("=" * 60)
-    print("\nCDP mode requires Brave to be running with remote debugging.")
-    print("\nTo fix this:")
-    print("  1. Launch Brave: uv run instagram-launch-brave")
-    print("  2. Or manually: brave-browser --remote-debugging-port=9222")
-    print("  3. Log into Instagram in that browser window")
-    print("  4. Retry the Instagram tool")
-    print("\nAlternatively, disable CDP mode (not recommended):")
-    print("  uv run -m instagram_mcp_server --no-cdp")
-    return False
+        logger.error(f"Failed to export Instagram session: {e}")
+        print(f"\n⚠ Failed to export session: {e}")
+        return False
+    finally:
+        # Don't close the browser - it's the user's running Brave instance
+        # Just disconnect the CDP connection
+        try:
+            await browser.close()
+        except Exception:
+            pass

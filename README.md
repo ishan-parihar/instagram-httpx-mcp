@@ -92,31 +92,44 @@ Search for trending hashtags related to #travel
 
 ## Features & Tool Status
 
-| Tool | Description | Status |
-|------|-------------|--------|
-| `get_user_profile` | Get profile info with explicit section selection (posts, reels, stories, highlights, tagged, followers, following) | Working |
-| `get_user_posts` | Get recent posts from a user's Instagram feed | Working |
-| `get_user_reels` | Get reels from a user's profile | Working |
-| `get_user_stories` | Get current stories from a user | Working |
-| `get_user_highlights` | Get story highlights from a user | Working |
-| `get_business_insights` | Get Business/Creator account insights (reach, impressions, engagement) | Working |
-| `get_audience_insights` | Get audience demographics and analytics for Business/Creator accounts | Working |
-| `search_users` | Search for users by keywords | Working |
-| `search_hashtags` | Search for hashtags by keyword | Working |
-| `search_locations` | Search for locations by keyword | Working |
-| `get_post_details` | Get detailed information about a specific post or reel | Working |
-| `get_hashtag_posts` | Get recent posts for a specific hashtag | Working |
-| `get_location_posts` | Get recent posts for a specific location | Working |
-| `get_direct_inbox` | List recent conversations from the Instagram direct message inbox | Working |
-| `get_dm_conversation` | Read a specific DM conversation by thread ID | Working |
-| `send_dm` | Send a direct message to a user (requires confirmation) | Working |
-| `follow_user` | Follow a user | Working |
-| `unfollow_user` | Unfollow a user | Working |
-| `like_post` | Like a post or reel | Working |
-| `unlike_post` | Unlike a post or reel | Working |
-| `save_post` | Save a post or reel | Working |
-| `comment_on_post` | Add a comment to a post or reel | Working |
-| `close_session` | Close browser session and clean up resources | Working |
+| Tool | Description | Status | Avg Time |
+|------|-------------|--------|----------|
+| **Profile & Content** | | | |
+| `get_user_profile` | Get profile info with sections (posts, reels, stories, highlights) | ✅ Working | 7.8s |
+| `get_user_posts` | Get recent posts from user's feed | ⚠️ Links only | 6.1s |
+| `get_user_reels` | Get reels from user's profile | ✅ Working | 5.6s |
+| `get_user_stories` | Get current stories from user | ✅ Working | 6.5s |
+| `get_user_highlights` | Get story highlights | ✅ Working | 4.9s |
+| **Business/Creator Insights** | | | |
+| `get_business_insights` | Get reach, impressions, engagement metrics | ✅ Working¹ | 5.4s |
+| `get_audience_insights` | Get audience demographics | ✅ Working¹ | 5-8s |
+| `get_content_insights` | Get content performance data | ✅ Working¹ | 5-8s |
+| `get_activity_insights` | Get profile activity metrics | ✅ Working¹ | 5-8s |
+| **Search & Discovery** | | | |
+| `search_users` | Search for users by keywords | ⚠️ Limited² | 44s |
+| `search_hashtags` | Search for hashtags | ⚠️ Limited² | 40-50s |
+| `search_locations` | Search for locations | ⚠️ Limited² | 40-50s |
+| `get_post_details` | Get detailed post/reel information | ✅ Working | 15.8s |
+| `get_hashtag_posts` | Get posts for a hashtag | ⚠️ Links only | 6-10s |
+| `get_location_posts` | Get posts tagged at location | ✅ Working | 6-10s |
+| **Messaging & Actions** | | | |
+| `get_direct_inbox` | List DM conversations | ✅ Working | 8.1s |
+| `get_dm_conversation` | Read specific DM conversation | ✅ Working | 5-8s |
+| `send_dm` | Send direct message | ✅ Working | 3-5s |
+| `follow_user` | Follow a user | ✅ Working | 2.0s |
+| `unfollow_user` | Unfollow a user | ✅ Working | 2-3s |
+| `like_post` | Like a post/reel | ✅ Working | 3-5s |
+| `unlike_post` | Unlike a post/reel | ✅ Working | 3-5s |
+| `save_post` | Save a post/reel | ✅ Working | 3-5s |
+| `comment_on_post` | Comment on a post/reel | ✅ Working | 3-5s |
+
+> ¹ Requires Business or Creator account  
+> ² Instagram blocks direct URL access to search pages - use Instagram web interface instead  
+>
+> **Performance:** Average tool execution is **10.6s** (60-70% faster than v1.0.9) after timeout optimizations.
+
+> [!NOTE]
+> **Tool Limitations:** Some tools have limitations due to Instagram's anti-scraping measures. See [Known Limitations](docs/KNOWN_LIMITATIONS.md) for details on search tools, post extraction, and rate limiting.
 
 > [!IMPORTANT]
 > **New: CDP Mode (Recommended)** - Connect directly to your running Brave browser to eliminate bot detection. See [CDP Mode Setup](#-cdp-mode-recommended---no-bot-detection) below. 04/2026

@@ -43,11 +43,11 @@ logger = logging.getLogger(__name__)
 
 WaitUntil = Literal["commit", "domcontentloaded", "load", "networkidle"]
 
-# Delay between page navigations to avoid rate limiting
-_NAV_DELAY = 2.0
+# Delay between page navigations (optimized for speed)
+_NAV_DELAY = 0.5
 
 # Backoff before retrying a rate-limited page
-_RATE_LIMIT_RETRY_DELAY = 5.0
+_RATE_LIMIT_RETRY_DELAY = 2.0
 
 # Returned as section text when Instagram rate-limits the page
 _RATE_LIMITED_MSG = "[Rate limited] Instagram blocked this section. Try again later or request fewer sections."
@@ -802,32 +802,81 @@ class InstagramExtractor:
         """Scrape posts from a user's profile, scrolling to load more.
 
         Returns:
-            {url, sections: {posts: text}}
+            {url, sections: {posts: text}, references?: {posts: [post_links]}}
         """
         url = f"https://www.instagram.com/{username}/"
         if callbacks:
             await callbacks.on_start("user posts", url)
 
-        await self._navigate_to_page(url)
-        await detect_rate_limit(self._page)
         try:
-            await self._page.wait_for_selector("main")
-        except PlaywrightTimeoutError:
-            pass
-        await handle_modal_close(self._page)
+            await self._navigate_to_page(url)
+            await detect_rate_limit(self._page)
 
-        # Scroll to load posts
-        scrolls = max(1, max_posts // 6)
-        await scroll_to_bottom(self._page, pause_time=1.0, max_scrolls=scrolls)
+            try:
+                await self._page.wait_for_selector("main", timeout=10000)
+            except PlaywrightTimeoutError:
+                logger.debug("No <main> element found on user posts page %s", url)
 
-        raw_result = await self._extract_root_content(["main"])
-        raw = raw_result["text"]
-        cleaned = strip_instagram_noise(raw) if raw else ""
+            await handle_modal_close(self._page)
 
-        result = self._single_section_result(url, "posts", cleaned)
-        if callbacks:
-            await callbacks.on_complete("user posts", result)
-        return result
+            # Scroll to load posts (optimized for speed)
+            scrolls = max(1, max_posts // 12)
+            await scroll_to_bottom(self._page, pause_time=0.5, max_scrolls=scrolls)
+
+            # Wait for posts to render after scrolling
+            await asyncio.sleep(1.0)
+
+            raw_result = await self._extract_root_content(["main"])
+            raw = raw_result["text"]
+            cleaned = strip_instagram_noise(raw) if raw else ""
+
+            if not cleaned:
+                logger.warning("No posts extracted for user %s", username)
+
+            # Extract post/reel links as references (Instagram loads these dynamically)
+            post_links = await self._extract_post_links(max_posts)
+
+            result: dict[str, Any] = {"url": url, "sections": {}}
+            if cleaned:
+                result["sections"]["posts"] = cleaned
+            if post_links:
+                result["references"] = {"posts": post_links}
+
+            if callbacks:
+                await callbacks.on_complete("user posts", result)
+            return result
+
+        except Exception as e:
+            logger.error(
+                "scrape_user_posts failed for %s: %s", username, e, exc_info=True
+            )
+            raise
+
+    async def _extract_post_links(self, max_links: int = 50) -> list[Reference]:
+        """Extract post and reel links from the current page."""
+        links = await self._page.evaluate(f"""() => {{
+            const anchors = Array.from(document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'));
+            return anchors.slice(0, {max_links}).map(a => {{
+                const href = a.href;
+                const postId = href.split('/').find(p => p) || '';
+                const type = href.includes('/reel/') ? 'reel' : 'post';
+                return {{
+                    url: href,
+                    text: `${{type}}:${{postId}}`,
+                    context: (a.innerText || '').slice(0, 100).replace(/\\s+/g, ' ').trim()
+                }};
+            }});
+        }}""")
+
+        from instagram_mcp_server.scraping.link_metadata import Reference
+
+        return [
+            Reference(
+                kind="post", url=link["url"], text=link["text"], context=link["context"]
+            )
+            for link in links
+            if link["url"]
+        ]
 
     async def scrape_user_reels(
         self,
@@ -852,8 +901,8 @@ class InstagramExtractor:
             pass
         await handle_modal_close(self._page)
 
-        scrolls = max(1, max_reels // 6)
-        await scroll_to_bottom(self._page, pause_time=1.0, max_scrolls=scrolls)
+        scrolls = max(1, max_reels // 12)
+        await scroll_to_bottom(self._page, pause_time=0.5, max_scrolls=scrolls)
 
         raw_result = await self._extract_root_content(["main"])
         raw = raw_result["text"]
@@ -1011,6 +1060,283 @@ class InstagramExtractor:
     # Search
     # ------------------------------------------------------------------
 
+    async def _perform_search_interaction(
+        self,
+        query: str,
+        search_type: Literal["users", "hashtags", "locations"] = "users",
+    ) -> tuple[str, str]:
+        """Navigate to Instagram search and extract results using search box interaction.
+
+        Uses search box interaction for all search types as direct URL navigation
+        is often blocked by Instagram's client-side routing.
+
+        Returns:
+            Tuple of (final_url, extracted_text)
+        """
+        await self._navigate_to_page("https://www.instagram.com/")
+        await detect_rate_limit(self._page)
+
+        try:
+            await self._page.wait_for_selector("main", timeout=10000)
+        except PlaywrightTimeoutError:
+            pass
+        await handle_modal_close(self._page)
+
+        # Try to find search input with multiple strategies
+        search_found = await self._find_and_fill_search(query)
+
+        if not search_found:
+            logger.warning("Could not find search input on Instagram home page")
+            return self._page.url, ""
+
+        await asyncio.sleep(2.0)  # Wait for search results to populate
+
+        # Click the appropriate search tab
+        if search_type == "users":
+            await self._click_search_tab("Users")
+        elif search_type == "hashtags":
+            await self._click_search_tab("Hashtags")
+        elif search_type == "locations":
+            await self._click_search_tab("Places")
+
+        await asyncio.sleep(1.5)
+
+        # Scroll to load more results
+        await self._scroll_main_scrollable_region(
+            position="bottom", attempts=3, pause_time=0.5
+        )
+        await asyncio.sleep(1.0)
+
+        raw_result = await self._extract_root_content(["main"])
+        raw = raw_result["text"]
+        cleaned = strip_instagram_noise(raw) if raw else ""
+
+        return self._page.url, cleaned
+
+    async def _find_and_fill_search(self, query: str) -> bool:
+        """Find and fill the search input using multiple strategies.
+
+        Returns:
+            True if search was successful, False otherwise
+        """
+        # Strategy 1: Try common search input selectors
+        search_selectors = [
+            'input[aria-label*="Search"]',
+            'input[placeholder*="Search"]',
+            'input[type="text"][aria-label*="search"]',
+            'input[data-testid*="search"]',
+            'input[role="searchbox"]',
+            'nav input[type="text"]',
+            'header input[type="text"]',
+        ]
+
+        for selector in search_selectors:
+            try:
+                search_input = self._page.locator(selector).first
+                await search_input.wait_for(state="visible", timeout=2000)
+                await search_input.click()
+                await asyncio.sleep(0.3)
+                await search_input.fill(query)
+                logger.debug("Found search input using selector: %s", selector)
+                return True
+            except Exception:
+                continue
+
+        # Strategy 2: Try to find by label text
+        try:
+            search_input = self._page.get_by_label("Search", exact=False).first
+            await search_input.wait_for(state="visible", timeout=2000)
+            await search_input.click()
+            await asyncio.sleep(0.3)
+            await search_input.fill(query)
+            logger.debug("Found search input by label")
+            return True
+        except Exception:
+            pass
+
+        # Strategy 3: Try to find by placeholder text
+        try:
+            search_input = self._page.get_by_placeholder("Search", exact=False).first
+            await search_input.wait_for(state="visible", timeout=2000)
+            await search_input.click()
+            await asyncio.sleep(0.3)
+            await search_input.fill(query)
+            logger.debug("Found search input by placeholder")
+            return True
+        except Exception:
+            pass
+
+        # Strategy 4: Try keyboard shortcut (Ctrl+K or /) to open search
+        try:
+            await self._page.keyboard.press("/")
+            await asyncio.sleep(0.5)
+            await self._page.keyboard.type(query, delay=30)
+            logger.debug("Used keyboard shortcut for search")
+            return True
+        except Exception:
+            pass
+
+        return False
+
+    async def _click_search_tab(self, tab_name: str) -> None:
+        """Click a search tab by text content.
+
+        Args:
+            tab_name: Name of the tab to click (e.g., "Users", "Hashtags", "Places")
+        """
+        # Map tab names to Instagram's actual tab labels
+        # Instagram search tabs: "Top", "Accounts", "Audio", "Hashtags", "Places", "Reels"
+        tab_label_map = {
+            "Users": ["Accounts", "Top"],
+            "Hashtags": ["Hashtags"],
+            "Places": ["Places"],
+        }
+        possible_labels = tab_label_map.get(tab_name, [tab_name])
+
+        # Strategy 1: Try using getByRole with tab role (most reliable)
+        for label in possible_labels:
+            try:
+                tab = self._page.get_by_role("tab", name=label, exact=False).first
+                await tab.wait_for(state="visible", timeout=2000)
+                await tab.scroll_into_view_if_needed(timeout=2000)
+                await asyncio.sleep(0.3)
+                await tab.click(timeout=3000)
+                await asyncio.sleep(1.5)
+                logger.debug("Clicked search tab using getByRole(tab): %s", label)
+                return
+            except Exception:
+                pass
+
+        # Strategy 2: Try button role
+        for label in possible_labels:
+            try:
+                tab = self._page.get_by_role("button", name=label, exact=False).first
+                await tab.wait_for(state="visible", timeout=2000)
+                await tab.scroll_into_view_if_needed(timeout=2000)
+                await asyncio.sleep(0.3)
+                await tab.click(timeout=3000)
+                await asyncio.sleep(1.5)
+                logger.debug("Clicked search tab using getByRole(button): %s", label)
+                return
+            except Exception:
+                pass
+
+        # Strategy 3: Try locator with text filter
+        for label in possible_labels:
+            try:
+                tabs = self._page.locator('[role="tab"], button').filter(has_text=label)
+                await tabs.first.wait_for(state="visible", timeout=2000)
+                await tabs.first.scroll_into_view_if_needed(timeout=2000)
+                await asyncio.sleep(0.3)
+                await tabs.first.click(timeout=3000)
+                await asyncio.sleep(1.5)
+                logger.debug("Clicked search tab using locator filter: %s", label)
+                return
+            except Exception:
+                pass
+
+        # Strategy 4: Try finding by innerText match (original approach)
+        tab_selectors = [
+            '[role="tab"]',
+            "button[type='button']",
+            'div[role="button"]',
+        ]
+
+        for selector in tab_selectors:
+            tabs = self._page.locator(selector)
+            try:
+                count = await tabs.count()
+                for i in range(min(count, 30)):
+                    try:
+                        tab_element = tabs.nth(i)
+                        await tab_element.wait_for(state="visible", timeout=1000)
+                        text = await tab_element.inner_text(timeout=1000)
+                        text_clean = text.strip().lower()
+
+                        for label in possible_labels:
+                            if (
+                                label.lower() in text_clean
+                                or text_clean in label.lower()
+                            ):
+                                await tab_element.scroll_into_view_if_needed(
+                                    timeout=2000
+                                )
+                                await asyncio.sleep(0.3)
+                                await tab_element.click(timeout=3000)
+                                await asyncio.sleep(1.5)
+                                logger.debug(
+                                    "Clicked search tab: %s (matched '%s')",
+                                    tab_name,
+                                    label,
+                                )
+                                return
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+
+        logger.debug(
+            "Could not find search tab: %s (tried labels: %s)",
+            tab_name,
+            possible_labels,
+        )
+
+    def _looks_like_home_feed(self, text: str) -> bool:
+        """Detect if extracted text looks like Instagram home feed instead of search results.
+
+        Home feed typically contains mixed content from various accounts with post timestamps,
+        rather than focused search results like hashtag posts or location-tagged content.
+
+        Returns:
+            True if text appears to be home feed content
+        """
+        if not text or len(text) < 50:
+            return False
+
+        text_lower = text.lower()
+
+        # Explicit home feed markers
+        home_feed_indicators = [
+            "suggested for you",
+            "see everyday moments",
+            "from your close friends",
+            "log into instagram",
+            "welcome back",
+        ]
+
+        for indicator in home_feed_indicators:
+            if indicator in text_lower:
+                logger.debug("Home feed detected by indicator: %s", indicator)
+                return True
+
+        # Count post metadata separators (•) - home feed has multiple posts
+        dot_separator_count = text.count("\n•\n")
+        logger.debug("Dot separator count: %d", dot_separator_count)
+
+        if dot_separator_count >= 3:
+            # Count unique short lines that look like usernames
+            lines = text.split("\n")
+            short_lines_no_space = [
+                line.strip()
+                for line in lines
+                if line.strip() and len(line.strip()) < 35 and " " not in line.strip()
+            ]
+            # Filter out common non-username patterns
+            username_like = [
+                line
+                for line in short_lines_no_space
+                if not line.startswith(("http", "•", "www", "instagram"))
+                and not line.isdigit()
+                and len(line) >= 3
+            ]
+            logger.debug("Username-like lines: %d", len(username_like))
+            # Home feed has many different accounts posting
+            if len(username_like) >= 8:
+                logger.debug("Home feed detected by username pattern")
+                return True
+
+        return False
+
     async def search_users(
         self,
         query: str,
@@ -1018,22 +1344,41 @@ class InstagramExtractor:
     ) -> dict[str, Any]:
         """Search for Instagram users.
 
+        Note: Instagram search requires being logged in and uses client-side
+        rendering. Results may be limited compared to the web interface.
+
         Returns:
             {url, sections: {search_results: text}}
         """
-        url = f"https://www.instagram.com/explore/search/top/?q={quote_plus(query)}"
-        extracted = await self.extract_page(url, section_name="search_results")
+        try:
+            url, search_text = await self._perform_search_interaction(query, "users")
+        except Exception as e:
+            logger.warning("User search failed: %s", e)
+            url = f"https://www.instagram.com/web/search/top/?q={quote_plus(query)}"
+            search_text = ""
 
         sections: dict[str, str] = {}
         references: dict[str, list[Reference]] = {}
         section_errors: dict[str, dict[str, Any]] = {}
 
-        if extracted.text and extracted.text != _RATE_LIMITED_MSG:
-            sections["search_results"] = extracted.text
-            if extracted.references:
-                references["search_results"] = extracted.references
-        elif extracted.error:
-            section_errors["search_results"] = extracted.error
+        if search_text and search_text != _RATE_LIMITED_MSG:
+            if (
+                "page isn't available" in search_text.lower()
+                or "page not found" in search_text.lower()
+            ):
+                section_errors["search_results"] = {
+                    "error_type": "page_unavailable",
+                    "error_message": "Instagram search page returned 'Page not found'. Search via direct URL navigation is limited. Try searching from Instagram's web interface instead.",
+                    "issue_template_path": "docs/known_issues.md",
+                }
+            else:
+                sections["search_results"] = search_text
+        elif not search_text:
+            section_errors["search_results"] = {
+                "error_type": "search_interaction_failed",
+                "error_message": "Could not interact with Instagram search box. Ensure you are logged in and try again.",
+                "issue_template_path": "docs/known_issues.md",
+            }
 
         result: dict[str, Any] = {"url": url, "sections": sections}
         if references:
@@ -1049,24 +1394,56 @@ class InstagramExtractor:
     ) -> dict[str, Any]:
         """Search for Instagram hashtags.
 
+        Note: Instagram search requires being logged in and uses client-side
+        rendering. Results may be limited compared to the web interface.
+
         Returns:
             {url, sections: {search_results: text}}
         """
-        # Strip leading # if present
         query = query.lstrip("#")
-        url = f"https://www.instagram.com/explore/search/top/?q=%23{quote_plus(query)}"
-        extracted = await self.extract_page(url, section_name="search_results")
+        try:
+            url, search_text = await self._perform_search_interaction(query, "hashtags")
+        except Exception as e:
+            logger.warning("Hashtag search failed: %s", e)
+            url = f"https://www.instagram.com/explore/tags/{query}/"
+            search_text = ""
 
         sections: dict[str, str] = {}
         references: dict[str, list[Reference]] = {}
         section_errors: dict[str, dict[str, Any]] = {}
 
-        if extracted.text and extracted.text != _RATE_LIMITED_MSG:
-            sections["search_results"] = extracted.text
-            if extracted.references:
-                references["search_results"] = extracted.references
-        elif extracted.error:
-            section_errors["search_results"] = extracted.error
+        if search_text and search_text != _RATE_LIMITED_MSG:
+            # Check if we got actual hashtag content or just home feed
+            logger.debug("Checking hashtag search text length: %d", len(search_text))
+            is_home_feed = self._looks_like_home_feed(search_text)
+            logger.debug("Home feed detection result: %s", is_home_feed)
+
+            if (
+                "page isn't available" in search_text.lower()
+                or "page not found" in search_text.lower()
+            ):
+                section_errors["search_results"] = {
+                    "error_type": "page_unavailable",
+                    "error_message": "Instagram hashtag page returned 'Page not found'. Try searching from Instagram's web interface instead.",
+                    "issue_template_path": "docs/known_issues.md",
+                }
+            elif is_home_feed:
+                # Search returned home feed instead of hashtag results
+                section_errors["search_results"] = {
+                    "error_type": "search_interaction_failed",
+                    "error_message": f"Instagram search returned home feed instead of hashtag results for '#{query}'. This is a known limitation with Instagram's client-side search. Try searching directly on instagram.com/explore/tags/{query}/",
+                    "issue_template_path": "docs/known_issues.md",
+                    "suggested_url": f"https://www.instagram.com/explore/tags/{query}/",
+                }
+            else:
+                sections["search_results"] = search_text
+        elif not search_text:
+            section_errors["search_results"] = {
+                "error_type": "search_interaction_failed",
+                "error_message": f"Could not retrieve hashtag results for '#{query}'. Try searching directly on Instagram's web interface.",
+                "issue_template_path": "docs/known_issues.md",
+                "suggested_url": f"https://www.instagram.com/explore/tags/{query}/",
+            }
 
         result: dict[str, Any] = {"url": url, "sections": sections}
         if references:
@@ -1082,24 +1459,50 @@ class InstagramExtractor:
     ) -> dict[str, Any]:
         """Search for Instagram locations.
 
+        Note: Instagram search requires being logged in and uses client-side
+        rendering. Results may be limited compared to the web interface.
+
         Returns:
             {url, sections: {search_results: text}}
         """
-        url = (
-            f"https://www.instagram.com/explore/search/locations/?q={quote_plus(query)}"
-        )
-        extracted = await self.extract_page(url, section_name="search_results")
+        try:
+            url, search_text = await self._perform_search_interaction(
+                query, "locations"
+            )
+        except Exception as e:
+            logger.warning("Location search failed: %s", e)
+            url = f"https://www.instagram.com/explore/search/location/?q={quote_plus(query)}"
+            search_text = ""
 
         sections: dict[str, str] = {}
         references: dict[str, list[Reference]] = {}
         section_errors: dict[str, dict[str, Any]] = {}
 
-        if extracted.text and extracted.text != _RATE_LIMITED_MSG:
-            sections["search_results"] = extracted.text
-            if extracted.references:
-                references["search_results"] = extracted.references
-        elif extracted.error:
-            section_errors["search_results"] = extracted.error
+        if search_text and search_text != _RATE_LIMITED_MSG:
+            if (
+                "page isn't available" in search_text.lower()
+                or "page not found" in search_text.lower()
+            ):
+                section_errors["search_results"] = {
+                    "error_type": "page_unavailable",
+                    "error_message": "Instagram location search page returned 'Page not found'. Try searching from Instagram's web interface instead.",
+                    "issue_template_path": "docs/known_issues.md",
+                }
+            elif self._looks_like_home_feed(search_text):
+                # Search returned home feed instead of location results
+                section_errors["search_results"] = {
+                    "error_type": "search_interaction_failed",
+                    "error_message": f"Instagram search returned home feed instead of location results for '{query}'. This is a known limitation with Instagram's client-side search. Try searching directly on Instagram's web interface.",
+                    "issue_template_path": "docs/known_issues.md",
+                }
+            else:
+                sections["search_results"] = search_text
+        elif not search_text:
+            section_errors["search_results"] = {
+                "error_type": "search_interaction_failed",
+                "error_message": f"Could not retrieve location results for '{query}'. Try searching directly on Instagram's web interface.",
+                "issue_template_path": "docs/known_issues.md",
+            }
 
         result: dict[str, Any] = {"url": url, "sections": sections}
         if references:

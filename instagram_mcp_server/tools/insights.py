@@ -21,7 +21,13 @@ from instagram_mcp_server.scraping.link_metadata import Reference
 
 logger = logging.getLogger(__name__)
 
-_DASHBOARD_URL = "https://www.instagram.com/professional_dashboard/"
+_DASHBOARD_URL = "https://www.instagram.com/accounts/insights/"
+_DASHBOARD_TABS = {
+    "overview": "",
+    "audience": "?show_tab=audience",
+    "content": "?show_tab=content",
+    "activity": "?show_tab=activity",
+}
 
 
 def register_insights_tools(mcp: FastMCP) -> None:
@@ -123,7 +129,7 @@ def register_insights_tools(mcp: FastMCP) -> None:
                 progress=0, total=100, message="Navigating to audience tab"
             )
 
-            url = f"{_DASHBOARD_URL}?tab=audience"
+            url = f"{_DASHBOARD_URL}{_DASHBOARD_TABS['audience']}"
             extracted = await extractor.extract_page(url, section_name="audience")
 
             sections: dict[str, str] = {}
@@ -186,7 +192,7 @@ def register_insights_tools(mcp: FastMCP) -> None:
                 progress=0, total=100, message="Navigating to content tab"
             )
 
-            url = f"{_DASHBOARD_URL}?tab=content"
+            url = f"{_DASHBOARD_URL}{_DASHBOARD_TABS['content']}"
             extracted = await extractor.extract_page(url, section_name="content")
 
             sections: dict[str, str] = {}
@@ -249,7 +255,7 @@ def register_insights_tools(mcp: FastMCP) -> None:
                 progress=0, total=100, message="Navigating to activity tab"
             )
 
-            url = f"{_DASHBOARD_URL}?tab=activity"
+            url = f"{_DASHBOARD_URL}{_DASHBOARD_TABS['activity']}"
             extracted = await extractor.extract_page(url, section_name="activity")
 
             sections: dict[str, str] = {}
