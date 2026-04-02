@@ -125,12 +125,17 @@ Search for trending hashtags related to #travel
 | **Transcription** | | | |
 | `transcribe_user_reels` | Download & transcribe reels to SRT subtitles | ✅ Working³ | 30-60s/reel |
 | `transcribe_reel` | Transcribe single reel by URL | ✅ Working³ | 30-60s |
+| **AI Analysis (Gemini)** | | | |
+| `analyze_reel_with_gemini` | AI-powered reel analysis (summary/topics/quotes) | ✅ Working⁴ | 15-25s |
+| `bulk_analyze_reels_with_gemini` | Analyze multiple reels with AI | ✅ Working⁴ | 20-30s/reel |
 
 > ¹ Requires Business or Creator account  
 > ² Instagram blocks direct URL access to search pages - use Instagram web interface instead  
 > ³ Requires `caption` command (Whisper transcription) - see docs/TRANSCRIPTION.md  
+> ⁴ Uses Google Gemini 2.0 Flash - API key required (see docs/GEMINI_ANALYSIS.md)  
 >
-> **Performance:** Average tool execution is **10.6s** (60-70% faster than v1.0.9) after timeout optimizations.
+> **Performance:** Average tool execution is **10.6s** (60-70% faster than v1.0.9) after timeout optimizations.  
+> **Gemini Analysis:** 3x faster than local transcription (~15-25s vs ~50s per reel)
 
 > [!NOTE]
 > **Tool Limitations:** Some tools have limitations due to Instagram's anti-scraping measures. See [Known Limitations](docs/KNOWN_LIMITATIONS.md) for details on search tools, post extraction, and rate limiting.
