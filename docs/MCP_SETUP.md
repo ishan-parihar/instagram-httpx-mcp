@@ -140,7 +140,7 @@ pgrep -af "brave.*remote-debugging-port"
 
 **What it does:** Fast AI-powered reel analysis (3x faster than local transcription).
 
-**Cost:** ~$0.00017 per reel (extremely cheap).
+**Cost:** FREE tier (15 requests/minute, 1000 requests/day)
 
 **Setup:**
 
@@ -148,15 +148,32 @@ pgrep -af "brave.*remote-debugging-port"
    - Go to https://aistudio.google.com/app/apikey
    - Click "Create API Key"
    - Copy the key
+   
+   **Note:** The default key may exceed quota. Use your own for reliable access.
 
 2. **Configure:**
 
-   **Option A: Environment Variable**
+   **Option A: Environment Variable (Recommended)**
    ```bash
    export GEMINI_API_KEY="your_key_here"
    ```
 
-   **Option B: Edit Config File**
+   **Option B: MCP Config**
+   ```json
+   {
+     "mcpServers": {
+       "instagram": {
+         "command": "uvx",
+         "args": ["instagram-scraper-mcp"],
+         "env": {
+           "GEMINI_API_KEY": "your_key_here"
+         }
+       }
+     }
+   }
+   ```
+
+   **Option C: Edit Config File**
    ```python
    # instagram_mcp_server/tools/gemini_analysis.py
    GEMINI_API_KEY = "your_key_here"

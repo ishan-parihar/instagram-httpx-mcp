@@ -21,10 +21,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configure Gemini
-# Get your API key from: https://aistudio.google.com/app/apikey
-# Can also set via environment variable: GEMINI_API_KEY
+# IMPORTANT: Replace with your own API key from https://aistudio.google.com/app/apikey
+# Free tier: 15 requests/minute, 1000 requests/day
+# Can also set via environment variable: export GEMINI_API_KEY="your_key"
 GEMINI_API_KEY = (
-    "YOUR_API_KEY_HERE"  # Replace with valid key or set GEMINI_API_KEY env var
+    "REDACTED_GOOGLE_API_KEY_2"  # May exceed quota - use your own
 )
 
 # Analysis directory
