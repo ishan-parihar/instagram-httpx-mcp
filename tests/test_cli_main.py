@@ -271,6 +271,9 @@ def test_profile_info_reports_committed_derived_runtime(
     monkeypatch.setattr(
         "instagram_mcp_server.cli_main.configure_logging", lambda **_kwargs: None
     )
+    monkeypatch.setattr(
+        "instagram_mcp_server.drivers.browser._cdp_mode_enabled", lambda: False
+    )
     monkeypatch.setattr("sys.argv", ["instagram-mcp-server"])  # Prevent argparse errors
     monkeypatch.setattr("instagram_mcp_server.cli_main.get_version", lambda: "4.0.0")
     monkeypatch.setattr(

@@ -4,19 +4,16 @@ Instagram Reel Transcription Tools.
 Downloads reels and generates SRT subtitles using existing caption command.
 """
 
-import asyncio
+import logging
 import subprocess
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastmcp import Context, FastMCP
 
-from instagram_mcp_server.constants import TOOL_TIMEOUT_SECONDS
-from instagram_mcp_server.dependencies import get_ready_extractor, handle_auth_error
+from instagram_mcp_server.dependencies import get_ready_extractor
 from instagram_mcp_server.error_handler import raise_tool_error
-
-import httpx
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -31,23 +28,63 @@ def ensure_directories():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-async def download_video(video_url: str, output_path: Path) -> bool:
-    """Download video from Instagram URL."""
+async def download_video(video_url: str, output_path: Path, page=None) -> bool:
+    """Download video from Instagram URL.
+
+    When a Playwright page is provided, extracts session cookies from the
+    browser context so the download request is authenticated.  Without
+    cookies Instagram CDN returns 403 Forbidden.
+    """
     try:
-        async with httpx.AsyncClient() as client:
+        headers: dict[str, str] = {
+            "Referer": "https://www.instagram.com/",
+        }
+
+        if page is not None:
+            try:
+                cookies = await page.context.cookies()
+                cookie_header = "; ".join(
+                    f"{c['name']}={c['value']}" for c in cookies if c.get("value")
+                )
+                if cookie_header:
+                    headers["Cookie"] = cookie_header
+            except Exception as e:
+                logger.warning("Could not extract cookies for video download: %s", e)
+
+        async with httpx.AsyncClient(headers=headers) as client:
             async with client.stream("GET", video_url, timeout=30.0) as response:
                 if response.status_code != 200:
-                    logger.error(f"Download failed: {response.status_code}")
+                    logger.error("Download failed: HTTP %d", response.status_code)
                     return False
 
                 with open(output_path, "wb") as f:
                     async for chunk in response.aiter_bytes(chunk_size=8192):
                         f.write(chunk)
 
-        logger.info(f"Downloaded: {output_path.name}")
+        logger.info("Downloaded: %s", output_path.name)
         return True
     except Exception as e:
-        logger.error(f"Download error: {e}")
+        logger.error("Download error: %s", e)
+        return False
+
+
+def is_caption_available() -> bool:
+    """Check if the caption CLI is installed and accessible."""
+    try:
+        result = subprocess.run(
+            ["caption", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return (
+            result.returncode == 0
+            or "usage" in result.stderr.lower()
+            or "usage" in result.stdout.lower()
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    except Exception:
         return False
 
 
@@ -66,7 +103,7 @@ def run_caption(media_path: Path, output_dir: Path = None) -> Path | None:
         output_dir = media_path.parent
 
     try:
-        logger.info(f"Running caption on {media_path.name}...")
+        logger.info("Running caption on %s...", media_path.name)
 
         result = subprocess.run(
             ["caption", str(media_path)],
@@ -77,26 +114,26 @@ def run_caption(media_path: Path, output_dir: Path = None) -> Path | None:
         )
 
         if result.returncode != 0:
-            logger.error(f"caption failed: {result.stderr}")
+            logger.error("caption failed: %s", result.stderr)
             return None
 
         srt_path = output_dir / f"{media_path.stem}.srt"
 
         if srt_path.exists():
-            logger.info(f"Generated: {srt_path.name}")
+            logger.info("Generated: %s", srt_path.name)
             return srt_path
         else:
-            logger.error(f"SRT not found: {srt_path}")
+            logger.error("SRT not found: %s", srt_path)
             return None
 
     except subprocess.TimeoutExpired:
-        logger.error(f"caption timeout for {media_path.name}")
+        logger.error("caption timeout for %s", media_path.name)
         return None
     except FileNotFoundError:
         logger.error("caption command not found. Make sure it's in PATH.")
         return None
     except Exception as e:
-        logger.error(f"caption error: {e}")
+        logger.error("caption error: %s", e)
         return None
 
 
@@ -121,7 +158,6 @@ def register_transcription_tools(mcp: FastMCP) -> None:
         title="Transcribe User Reels",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"reels", "transcription", "accessibility"},
-        exclude_args=["extractor"],
     )
     async def transcribe_user_reels(
         username: str,
@@ -153,6 +189,21 @@ def register_transcription_tools(mcp: FastMCP) -> None:
         try:
             ensure_directories()
 
+            # Check for caption CLI dependency upfront
+            if not is_caption_available():
+                return {
+                    "url": f"https://www.instagram.com/{username}/",
+                    "transcripts": [],
+                    "total_reels": 0,
+                    "warnings": [
+                        "The 'caption' CLI tool is not installed. Transcription requires it. "
+                        "Install with: pip install caption (or see https://github.com/ufal/whisper). "
+                        "Alternative: Use analyze_reel_with_gemini for AI-powered transcription without local dependencies."
+                    ],
+                    "temp_dir": str(TMP_DIR),
+                    "output_dir": str(OUTPUT_DIR),
+                }
+
             extractor = extractor or await get_ready_extractor(
                 ctx, tool_name="transcribe_user_reels"
             )
@@ -161,7 +212,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                 progress=0, total=100, message="Fetching reels..."
             )
 
-            logger.info(f"Fetching reels for @{username} (max={max_reels})")
+            logger.info("Fetching reels for @%s (max=%d)", username, max_reels)
 
             reels_result = await extractor.scrape_user_reels(
                 username, max_reels=max_reels
@@ -171,7 +222,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
 
             if not reel_links:
                 raise_tool_error(
-                    Exception(f"No reels found for @{username}"),
+                    Exception("No reels found for @%s" % username),
                     "transcribe_user_reels",
                 )
 
@@ -180,26 +231,53 @@ def register_transcription_tools(mcp: FastMCP) -> None:
 
             for i, reel in enumerate(reel_links):
                 reel_id = reel.get("text", "").replace("reel:", "")
-                video_url = reel.get("url", "")
+                reel_page_url = reel.get("url", "")
 
-                if not reel_id or not video_url:
-                    logger.warning(f"Skipping reel {i + 1}: missing URL or ID")
+                if not reel_id or not reel_page_url:
+                    logger.warning("Skipping reel %d: missing URL or ID", i + 1)
                     continue
 
                 await ctx.report_progress(
                     progress=int((i / total_reels) * 100),
+                    total=100,
+                    message=f"Extracting video URL {i + 1}/{total_reels}...",
+                )
+
+                # Navigate to the reel page to extract the actual CDN video URL
+                try:
+                    await extractor._navigate_to_page(reel_page_url)
+                    # Wait for video element or article to render
+                    try:
+                        await extractor._page.wait_for_selector(
+                            'video, article, [role="main"]',
+                            timeout=10000,
+                        )
+                    except Exception:
+                        logger.debug("Video element not found, proceeding anyway")
+                    video_url = await extractor.extract_video_url()
+                    if not video_url:
+                        logger.warning(
+                            "Skipping %s: could not extract video CDN URL", reel_id
+                        )
+                        continue
+                except Exception as e:
+                    logger.warning("Skipping %s: navigation failed (%s)", reel_id, e)
+                    continue
+
+                await ctx.report_progress(
+                    progress=int(((i + 0.5) / total_reels) * 100),
                     total=100,
                     message=f"Downloading reel {i + 1}/{total_reels}...",
                 )
 
                 video_path = TMP_DIR / f"{reel_id}.mp4"
 
-                if not await download_video(video_url, video_path):
-                    logger.warning(f"Skipping {reel_id}: download failed")
+                if not await download_video(video_url, video_path, extractor._page):
+                    logger.warning("Skipping %s: download failed", reel_id)
                     continue
 
                 await ctx.report_progress(
-                    progress=int(((i + 0.5) / total_reels) * 100),
+                    progress=int(((i + 0.75) / total_reels) * 100),
                     total=100,
                     message=f"Transcribing reel {i + 1}/{total_reels}...",
                 )
@@ -207,7 +285,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                 srt_path = run_caption(video_path)
 
                 if not srt_path or not srt_path.exists():
-                    logger.warning(f"Skipping {reel_id}: transcription failed")
+                    logger.warning("Skipping %s: transcription failed", reel_id)
                     if not keep_videos:
                         video_path.unlink(missing_ok=True)
                     continue
@@ -248,7 +326,6 @@ def register_transcription_tools(mcp: FastMCP) -> None:
         title="Transcribe Single Reel",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"reels", "transcription"},
-        exclude_args=["extractor"],
     )
     async def transcribe_reel(
         reel_url: str,
@@ -270,6 +347,21 @@ def register_transcription_tools(mcp: FastMCP) -> None:
         try:
             ensure_directories()
 
+            # Check for caption CLI dependency upfront
+            if not is_caption_available():
+                return {
+                    "reel_id": reel_url.rstrip("/").split("/reel/")[-1].split("?")[0],
+                    "video_url": None,
+                    "srt_path": None,
+                    "transcript_preview": None,
+                    "reel_url": reel_url,
+                    "warnings": [
+                        "The 'caption' CLI tool is not installed. Transcription requires it. "
+                        "Install with: pip install caption (or see https://github.com/ufal/whisper). "
+                        "Alternative: Use analyze_reel_with_gemini for AI-powered transcription without local dependencies."
+                    ],
+                }
+
             reel_id = reel_url.rstrip("/").split("/reel/")[-1].split("?")[0]
 
             await ctx.report_progress(
@@ -280,28 +372,33 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                 ctx, tool_name="transcribe_reel"
             )
 
-            logger.info(f"Transcribing reel: {reel_id}")
+            logger.info("Transcribing reel: %s", reel_id)
 
-            reel_result = await extractor.extract_page(reel_url, section_name="main")
+            # Navigate to the reel page and extract the actual CDN video URL
+            await extractor._navigate_to_page(reel_url)
+            # Wait for video element or article to render
+            try:
+                await extractor._page.wait_for_selector(
+                    'video, article, [role="main"]',
+                    timeout=10000,
+                )
+            except Exception:
+                logger.debug("Video element not found, proceeding anyway")
 
-            video_url = None
-            if reel_result.get("references"):
-                for ref in reel_result["references"].get("main", []):
-                    if "video" in ref.get("kind", "").lower() or "/reel/" in ref.get(
-                        "url", ""
-                    ):
-                        video_url = ref.get("url")
-                        break
+            video_url = await extractor.extract_video_url()
 
             if not video_url:
-                raise Exception("Could not extract video URL from reel")
+                raise Exception(
+                    "Could not extract video URL from reel. "
+                    "The reel may be private, deleted, or Instagram's structure changed."
+                )
 
             await ctx.report_progress(
                 progress=25, total=100, message="Downloading video..."
             )
 
             video_path = TMP_DIR / f"{reel_id}.mp4"
-            if not await download_video(video_url, video_path):
+            if not await download_video(video_url, video_path, extractor._page):
                 raise Exception("Video download failed")
 
             await ctx.report_progress(

@@ -390,10 +390,8 @@ def _tool_name_for_context(payload: dict[str, Any]) -> str | None:
         "get_user_stories",
         "get_user_highlights",
         "get_post_details",
-        "get_hashtag_posts",
         "get_location_posts",
         "search_users",
-        "search_hashtags",
         "search_locations",
         "get_business_insights",
         "get_audience_insights",
@@ -418,12 +416,6 @@ def _tool_name_for_context(payload: dict[str, Any]) -> str | None:
         return "get_business_insights"
     if context == "search_posts":
         return "search_users"
-    if context == "extract_search_page":
-        target_url = str(payload.get("target_url") or "")
-        if "/explore/search" in target_url:
-            return "search_users"
-        if "/explore/tags" in target_url:
-            return "get_hashtag_posts"
 
     return None
 

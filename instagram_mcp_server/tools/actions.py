@@ -26,7 +26,6 @@ def register_action_tools(mcp: FastMCP) -> None:
         title="Follow User",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"actions", "social"},
-        exclude_args=["extractor"],
     )
     async def follow_user(
         username: str,
@@ -52,7 +51,9 @@ def register_action_tools(mcp: FastMCP) -> None:
             )
             logger.info("Following user: %s", username)
 
-            result = await extractor.follow_user(username, )
+            result = await extractor.follow_user(
+                username,
+            )
 
             return result
 
@@ -69,7 +70,6 @@ def register_action_tools(mcp: FastMCP) -> None:
         title="Unfollow User",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"actions", "social"},
-        exclude_args=["extractor"],
     )
     async def unfollow_user(
         username: str,
@@ -94,7 +94,9 @@ def register_action_tools(mcp: FastMCP) -> None:
             )
             logger.info("Unfollowing user: %s", username)
 
-            result = await extractor.unfollow_user(username, )
+            result = await extractor.unfollow_user(
+                username,
+            )
 
             return result
 
@@ -111,7 +113,6 @@ def register_action_tools(mcp: FastMCP) -> None:
         title="Like Post",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"actions", "social"},
-        exclude_args=["extractor"],
     )
     async def like_post(
         post_url: str,
@@ -153,7 +154,6 @@ def register_action_tools(mcp: FastMCP) -> None:
         title="Unlike Post",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"actions", "social"},
-        exclude_args=["extractor"],
     )
     async def unlike_post(
         post_url: str,
@@ -195,7 +195,6 @@ def register_action_tools(mcp: FastMCP) -> None:
         title="Save Post",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"actions"},
-        exclude_args=["extractor"],
     )
     async def save_post(
         post_url: str,
@@ -244,7 +243,6 @@ def register_action_tools(mcp: FastMCP) -> None:
         title="Comment on Post",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"actions", "social"},
-        exclude_args=["extractor"],
     )
     async def comment_on_post(
         post_url: str,

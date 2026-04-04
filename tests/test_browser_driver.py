@@ -57,6 +57,9 @@ def _make_mock_browser() -> MagicMock:
     browser.import_cookies = AsyncMock(return_value=False)
     browser.export_cookies = AsyncMock(return_value=False)
     browser.export_storage_state = AsyncMock(return_value=True)
+    browser.apply_stealth_after_navigation = AsyncMock()
+    browser.context = MagicMock()
+    browser.context.new_page = AsyncMock(return_value=MagicMock())
     return browser
 
 
@@ -66,7 +69,12 @@ def _write_source_state(tmp_path, *, runtime_id: str, login_generation: str = "g
     (profile_dir / "Default").mkdir(parents=True, exist_ok=True)
     (profile_dir / "Default" / "Cookies").write_text("placeholder")
     portable_cookie_path(profile_dir).write_text(
-        json.dumps([{"name": "sessionid", "domain": ".instagram.com"}])
+        json.dumps(
+            [
+                {"name": "sessionid", "value": "test123", "domain": ".instagram.com"},
+                {"name": "csrftoken", "value": "abc456", "domain": ".instagram.com"},
+            ]
+        )
     )
     source_state_path(profile_dir).write_text(
         json.dumps(
@@ -150,7 +158,7 @@ async def test_same_runtime_uses_source_profile(tmp_path):
     assert result is source_browser
     ctor.assert_called_once()
     assert ctor.call_args.kwargs["user_data_dir"] == tmp_path / "profile"
-    source_browser.import_cookies.assert_not_awaited()
+    source_browser.import_cookies.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -33,8 +33,13 @@ class BrowserConfig:
     user_data_dir: str = "~/.instagram-mcp/profile"  # Persistent browser profile
 
     # CDP mode configuration
-    use_cdp_mode: bool = True  # Use CDP mode by default
+    use_cdp_mode: bool = False  # Isolated cookie-imported browser by default
     cdp_port: int = 9222  # CDP debugging port
+
+    # Multi-browser support
+    preferred_browser: str | None = (
+        None  # Browser ID from cookie_import.BROWSER_REGISTRY
+    )
 
     def validate(self) -> None:
         """Validate browser configuration values."""

@@ -16,18 +16,10 @@ USER_SECTIONS: dict[str, tuple[str, bool]] = {
 
 # Business/Creator insights sections
 INSIGHTS_SECTIONS: dict[str, tuple[str, bool]] = {
-    "overview": ("/professional_dashboard/", False),
-    "audience": ("/professional_dashboard/?tab=audience", False),
-    "content": ("/professional_dashboard/?tab=content", False),
-    "activity": ("/professional_dashboard/?tab=activity", False),
-}
-
-# Search sections
-# Instagram search uses client-side routing - these URLs may require being logged in
-SEARCH_SECTIONS: dict[str, tuple[str, bool]] = {
-    "users": ("/web/search/top/?q=", False),
-    "hashtags": ("/web/search/top/?q=%23", False),
-    "locations": ("/web/search/locations/?q=", False),
+    "overview": ("/accounts/insights/", False),
+    "audience": ("/accounts/insights/?show_tab=audience", False),
+    "content": ("/accounts/insights/?show_tab=content", False),
+    "activity": ("/accounts/insights/?show_tab=activity", False),
 }
 
 

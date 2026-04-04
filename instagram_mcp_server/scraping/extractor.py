@@ -159,10 +159,29 @@ def _action_result(
     return result
 
 
-def _normalize_csv(value: str, mapping: dict[str, str]) -> str:
-    """Normalize a comma-separated filter value using the provided mapping."""
-    parts = [v.strip() for v in value.split(",")]
-    return ",".join(mapping.get(p, p) for p in parts)
+def _parse_number(value: str | None) -> int | None:
+    """Parse a number that may be abbreviated (e.g. '1.2K', '10.3M').
+
+    Used across the extractor for engagement metrics and view counts.
+    """
+    if not value:
+        return None
+    value = value.strip().lower()
+    try:
+        if value.endswith("k"):
+            return int(float(value[:-1]) * 1_000)
+        elif value.endswith("m"):
+            return int(float(value[:-1]) * 1_000_000)
+        elif value.endswith("b"):
+            return int(float(value[:-1]) * 1_000_000_000)
+        elif value.isdigit():
+            return int(value)
+        elif "," in value:
+            return int(value.replace(",", ""))
+        else:
+            return int(float(value))
+    except (ValueError, IndexError):
+        return None
 
 
 @dataclass
@@ -174,12 +193,20 @@ class ExtractedSection:
     error: dict[str, Any] | None = None
 
 
-def strip_instagram_noise(text: str) -> str:
+def strip_instagram_noise(text: str, *, page_type: str = "default") -> str:
     """Remove Instagram page chrome (footer, sidebar recommendations) from innerText.
 
     Finds the earliest occurrence of any known noise marker and truncates there.
+
+    Args:
+        text: Raw innerText to clean.
+        page_type: Context hint for noise stripping.
+            - "default": Full noise stripping (profile pages, etc.)
+            - "grid": Grid pages (reels, posts, hashtag, location) — only strips
+              true footer chrome, preserves inline "Suggested for you" / "Discover more".
+            - "profile": Profile page — standard stripping.
     """
-    cleaned = _truncate_instagram_noise(text)
+    cleaned = _truncate_instagram_noise(text, page_type=page_type)
     return _filter_instagram_noise_lines(cleaned)
 
 
@@ -193,10 +220,26 @@ def _filter_instagram_noise_lines(text: str) -> str:
     return "\n".join(filtered_lines).strip()
 
 
-def _truncate_instagram_noise(text: str) -> str:
-    """Trim known Instagram chrome blocks before any per-line noise filtering."""
+def _truncate_instagram_noise(text: str, *, page_type: str = "default") -> str:
+    """Trim known Instagram chrome blocks before any per-line noise filtering.
+
+    On grid pages (reels, posts, hashtag, location), inline markers like
+    "Suggested for you" and "Discover more" mark the end-of-grid recommendations
+    — not the footer. Only true footer markers are stripped on grid pages.
+    """
     earliest = len(text)
+
+    # Inline markers that appear mid-content on grid pages — skip these on grids
+    inline_pattern_strings = {
+        r"^Suggested for you$",
+        r"^Discover more$",
+        r"^More posts$",
+    }
+
     for pattern in _NOISE_MARKERS:
+        # On grid pages, skip inline markers that are not footer noise
+        if page_type == "grid" and pattern.pattern in inline_pattern_strings:
+            continue
         match = pattern.search(text)
         if match and match.start() < earliest:
             earliest = match.start()
@@ -439,13 +482,6 @@ class InstagramExtractor:
     # Generic browser helpers
     # ------------------------------------------------------------------
 
-    async def get_page_text(self) -> str:
-        """Extract innerText from the main content area of the current page."""
-        text = await self._page.evaluate(
-            "() => (document.querySelector('main') || document.body).innerText || ''"
-        )
-        return strip_instagram_noise(text) if isinstance(text, str) else ""
-
     async def click_button_by_text(
         self, text: str, *, scope: str = "main", timeout: int = 5000
     ) -> bool:
@@ -664,6 +700,21 @@ class InstagramExtractor:
         # Dismiss any modals blocking content
         await handle_modal_close(self._page)
 
+        # Derive page_type from URL for context-aware noise stripping
+        page_type = (
+            "grid"
+            if any(
+                p in url
+                for p in (
+                    "/reels/",
+                    "/tagged/",
+                    "/explore/tags/",
+                    "/explore/locations/",
+                )
+            )
+            else "default"
+        )
+
         # Profile pages with lazy-loaded content need extra scroll
         is_profile = (
             "/reels/" in url or "/tagged/" in url or url.rstrip("/").count("/") <= 4
@@ -693,7 +744,7 @@ class InstagramExtractor:
 
         if not raw:
             return ExtractedSection(text="", references=[])
-        truncated = _truncate_instagram_noise(raw)
+        truncated = _truncate_instagram_noise(raw, page_type=page_type)
         if not truncated and raw.strip():
             logger.warning(
                 "Page %s returned only Instagram chrome (likely rate-limited)", url
@@ -709,6 +760,497 @@ class InstagramExtractor:
         return ExtractedSection(
             text=cleaned,
             references=build_references(raw_result["references"], section_name),
+        )
+
+    async def extract_current_page(self, section_name: str) -> ExtractedSection:
+        """Extract innerText from the currently loaded page without re-navigating.
+
+        Used after SPA tab switches where calling extract_page() would
+        re-navigate to the base URL and lose the active tab state.
+        """
+        url = self._page.url
+        await detect_rate_limit(self._page)
+
+        try:
+            await self._page.wait_for_selector("main", timeout=5000)
+        except PlaywrightTimeoutError:
+            logger.debug("No <main> element found on current page")
+
+        await handle_modal_close(self._page)
+
+        page_type = (
+            "grid"
+            if any(
+                p in url
+                for p in (
+                    "/reels/",
+                    "/tagged/",
+                    "/explore/tags/",
+                    "/explore/locations/",
+                )
+            )
+            else "default"
+        )
+
+        try:
+            await self._page.wait_for_function(
+                """() => {
+                    const main = document.querySelector('main');
+                    if (!main) return false;
+                    return main.innerText.length > 200;
+                }""",
+                timeout=8000,
+            )
+        except PlaywrightTimeoutError:
+            logger.debug("Page content did not load on current page")
+
+        await scroll_to_bottom(self._page, pause_time=0.5, max_scrolls=5)
+
+        raw_result = await self._extract_root_content(["main"])
+        raw = raw_result["text"]
+
+        if not raw:
+            return ExtractedSection(text="", references=[])
+        truncated = _truncate_instagram_noise(raw, page_type=page_type)
+        if not truncated and raw.strip():
+            return ExtractedSection(text=_RATE_LIMITED_MSG, references=[])
+        cleaned = _filter_instagram_noise_lines(truncated)
+
+        if _detect_rate_limit_text(cleaned):
+            return ExtractedSection(text=_RATE_LIMITED_MSG, references=[])
+
+        return ExtractedSection(
+            text=cleaned,
+            references=build_references(raw_result["references"], section_name),
+        )
+
+    # ------------------------------------------------------------------
+    # Structured data extraction (OG meta, video URLs, engagement)
+    # ------------------------------------------------------------------
+
+    async def extract_og_metadata(self) -> dict[str, str]:
+        """Extract all Open Graph meta tags from the current page.
+
+        Returns dict of property -> content for all og:* meta tags.
+        Common keys: og:title, og:description, og:image, og:video,
+        og:video:secure_url, og:like_count, og:video_view_count,
+        og:comment_count, article:published_time.
+        """
+        return await self._page.evaluate("""() => {
+            const metas = document.querySelectorAll('meta[property^="og:"], meta[property="article:published_time"]');
+            const data = {};
+            metas.forEach(m => {
+                const prop = m.getAttribute('property');
+                const content = m.getAttribute('content');
+                if (prop && content) data[prop] = content;
+            });
+            return data;
+        }""")
+
+    async def extract_video_url(self) -> str | None:
+        """Extract the video CDN URL from the current reel/post page.
+
+        Tries multiple strategies: og:video meta tag, <video> src,
+        and source element within <video>.
+        """
+        # Strategy 1: OG video meta tag
+        og_data = await self.extract_og_metadata()
+        video_url = og_data.get("og:video") or og_data.get("og:video:secure_url")
+        if video_url:
+            return video_url
+
+        # Strategy 2: <video> element src
+        video_url = await self._page.evaluate("""() => {
+            const video = document.querySelector('video');
+            if (video?.src && video.src.startsWith('http')) return video.src;
+            const source = document.querySelector('video source');
+            if (source?.src && source.src.startsWith('http')) return source.src;
+            return null;
+        }""")
+        return video_url
+
+    async def extract_thumbnail_url(self) -> str | None:
+        """Extract the thumbnail/cover image URL from the current page.
+
+        Tries og:image, then falls back to <img> within post/reel card.
+        """
+        # Strategy 1: OG image meta tag
+        og_data = await self.extract_og_metadata()
+        thumbnail = og_data.get("og:image")
+        if thumbnail:
+            return thumbnail
+
+        # Strategy 2: First meaningful img in main (excluding icons, emojis)
+        thumbnail = await self._page.evaluate("""() => {
+            const main = document.querySelector('main');
+            if (!main) return null;
+            // Look for images from CDN (not icons)
+            const imgs = main.querySelectorAll('img[src*="cdninstagram.com"]');
+            for (const img of imgs) {
+                const src = img.src || img.getAttribute('src');
+                if (src && !src.includes('chrome-extension') && !src.includes('data:')) {
+                    return src;
+                }
+            }
+            return null;
+        }""")
+        return thumbnail
+
+    async def extract_engagement_from_meta(self) -> dict[str, int | None]:
+        """Extract engagement metrics from Open Graph meta tags on the current page.
+
+        Returns dict with keys: views, likes, comments, shares (all nullable int).
+        Falls back to parsing from page text if meta tags are unavailable.
+        """
+
+        og_data = await self.extract_og_metadata()
+        views = og_data.get("og:video_view_count")
+        likes = og_data.get("og:like_count")
+        comments = og_data.get("og:comment_count")
+
+        result = {
+            "views": _parse_number(views),
+            "likes": _parse_number(likes),
+            "comments": _parse_number(comments),
+        }
+
+        # Fallback: parse engagement from page text if meta tags are empty
+        # Instagram shows "X likes, Y comments" in the caption area
+        if result["likes"] is None or result["comments"] is None:
+            page_text = await self._page.evaluate("""() => {
+                const main = document.querySelector('main');
+                return main ? main.innerText || '' : '';
+            }""")
+
+            # Pattern: "10 likes, 1 comments - username on ..."
+            like_match = re.search(r"([\d,.KkMm]+)\s*likes?", page_text)
+            comment_match = re.search(r"([\d,.KkMm]+)\s*comments?", page_text)
+            view_match = re.search(r"([\d,.KkMm]+)\s*views?", page_text)
+
+            if result["likes"] is None and like_match:
+                result["likes"] = _parse_number(like_match.group(1))
+            if result["comments"] is None and comment_match:
+                result["comments"] = _parse_number(comment_match.group(1))
+            if result["views"] is None and view_match:
+                result["views"] = _parse_number(view_match.group(1))
+
+        return result
+
+    async def extract_timestamp(self) -> str | None:
+        """Extract the publication timestamp from the current page.
+
+        Tries <time datetime>, article:published_time meta, then
+        falls back to parsing relative time text from innerText.
+        """
+        # Strategy 1: <time datetime> element
+        timestamp = await self._page.evaluate("""() => {
+            const time = document.querySelector('time[datetime]');
+            return time?.getAttribute('datetime') || null;
+        }""")
+        if timestamp:
+            return timestamp
+
+        # Strategy 2: article:published_time meta
+        og_data = await self.extract_og_metadata()
+        published = og_data.get("article:published_time")
+        if published:
+            return published
+
+        return None
+
+    async def extract_audio_info(self) -> dict[str, str | None]:
+        """Extract audio/music information from the current reel page.
+
+        Returns dict with keys: audio_name, audio_artist.
+        Filters out UI noise like "Audio is muted".
+        """
+        return await self._page.evaluate("""() => {
+            // Audio info is typically in a link near the reel
+            const audioLinks = document.querySelectorAll('a[href*="/reels/audio/"]');
+            if (audioLinks.length > 0) {
+                const text = audioLinks[0].innerText || audioLinks[0].textContent || '';
+                // Filter out UI noise
+                const noise = ['Audio is muted', 'Audio', 'Original audio', 'Muted'];
+                if (noise.includes(text.trim())) {
+                    // Try the next audio link or return the text as-is if it has more content
+                    for (let i = 1; i < audioLinks.length; i++) {
+                        const altText = audioLinks[i].innerText || audioLinks[i].textContent || '';
+                        if (!noise.includes(altText.trim()) && altText.trim()) {
+                            const parts = altText.split('•').map(s => s.trim()).filter(Boolean);
+                            if (parts.length >= 2) {
+                                return { audio_name: parts[1], audio_artist: parts[0] };
+                            }
+                            return { audio_name: altText || null, audio_artist: null };
+                        }
+                    }
+                    // If all audio links are noise, return null
+                    return { audio_name: null, audio_artist: null };
+                }
+                // Format is typically "Artist • Track Name" or "Track Name"
+                const parts = text.split('•').map(s => s.trim()).filter(Boolean);
+                if (parts.length >= 2) {
+                    return { audio_name: parts[1], audio_artist: parts[0] };
+                }
+                return { audio_name: text || null, audio_artist: null };
+            }
+            return { audio_name: null, audio_artist: null };
+        }""")
+
+    async def extract_caption_from_page(self) -> str | None:
+        """Extract the post/reel caption from the current page.
+
+        Tries JSON-LD structured data first (full caption), then falls back to
+        og:description (may be truncated), then to parsing the caption section
+        from innerText.
+        """
+        # Try JSON-LD first — it has the full caption, unlike og:description
+        try:
+            json_ld_caption = await self._page.evaluate("""() => {
+                const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+                for (const script of scripts) {
+                    try {
+                        const data = JSON.parse(script.textContent);
+                        // Instagram uses schema.org Article or VideoObject
+                        if (data && data.description) {
+                            return data.description;
+                        }
+                        // Check nested @graph
+                        if (data && data['@graph']) {
+                            for (const item of data['@graph']) {
+                                if (item.description) {
+                                    return item.description;
+                                }
+                            }
+                        }
+                    } catch (e) { /* skip malformed JSON */ }
+                }
+                return null;
+            }""")
+            if json_ld_caption:
+                return json_ld_caption
+        except Exception:
+            logger.debug("Failed to extract caption from JSON-LD")
+
+        # Try extracting from sharedData / window._sharedData
+        try:
+            shared_caption = await self._page.evaluate("""() => {
+                try {
+                    // Try __additionalDataInjected first
+                    if (window.__additionalDataInjected) {
+                        const keys = Object.keys(window.__additionalDataInjected);
+                        for (const key of keys) {
+                            const data = window.__additionalDataInjected[key].data;
+                            if (data && data.shortcode_media) {
+                                return data.shortcode_media.edge_media_to_caption.edges[0]?.node?.text || null;
+                            }
+                        }
+                    }
+                    // Try __initialDataInjected
+                    if (window.__initialDataInjected) {
+                        const text = window.__initialDataInjected;
+                        if (text && text.includes('edge_media_to_caption')) {
+                            const match = text.match(/"text":"((?:[^"\\\\]|\\\\.)*)"/);
+                            if (match) return match[1].replace(/\\\\n/g, '\n');
+                        }
+                    }
+                } catch (e) { /* skip */ }
+                return null;
+            }""")
+            if shared_caption:
+                return shared_caption
+        except Exception:
+            logger.debug("Failed to extract caption from shared data")
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Reel and Post structured extraction
+    # ------------------------------------------------------------------
+
+    async def _extract_reel_links(self, max_links: int = 50) -> list[Reference]:
+        """Extract reel links from the current reels grid page.
+
+        Returns a list of Reference objects with reel URLs and context.
+        """
+        links = await self._page.evaluate(f"""() => {{
+            const anchors = Array.from(document.querySelectorAll('a[href*="/reel/"]'));
+            return anchors.slice(0, {max_links}).map(a => {{
+                // Filter out extension-injected anchors (e.g. download helpers)
+                if (a.href.startsWith('chrome-extension:') || a.href.startsWith('moz-extension:')) return null;
+                const href = a.href;
+                const match = href.match(/\/reel\/([A-Za-z0-9_-]+)/);
+                const reelId = match ? match[1] : '';
+                // Get view count from nearby text or aria-label
+                const parent = a.closest('article, div');
+                let viewCount = '';
+                if (parent) {{
+                    const text = parent.innerText || '';
+                    const numbers = text.match(/[\\d,]+/g);
+                    if (numbers && numbers.length > 0) {{
+                        viewCount = numbers[0];
+                    }}
+                }}
+                return {{
+                    url: href,
+                    text: `reel:${{reelId}}`,
+                    context: viewCount,
+                    reel_id: reelId,
+                }};
+            }}).filter(Boolean);
+        }}""")
+
+        return [
+            Reference(
+                kind="reel",
+                url=link["url"],
+                text=link["text"],
+                context=link.get("context", ""),
+            )
+            for link in links
+            if link["url"]
+        ]
+
+    async def _extract_reels_from_grid(
+        self, max_reels: int = 50
+    ) -> list[dict[str, Any]]:
+        """Extract structured reel data from the reels grid page.
+
+        Returns list of dicts with basic reel info available from the grid
+        (ID, URL, thumbnail, approximate view count). Full details require
+        navigating to individual reel pages.
+        """
+        return await self._page.evaluate(
+            """({ maxReels }) => {
+            const anchors = Array.from(document.querySelectorAll('a[href*="/reel/"]'));
+            const results = [];
+            for (let i = 0; i < Math.min(anchors.length, maxReels); i++) {
+                const a = anchors[i];
+                // Skip extension-injected anchors
+                if (a.href.startsWith('chrome-extension:') || a.href.startsWith('moz-extension:')) continue;
+
+                const href = a.href || '';
+                const match = href.match(/\/reel\/([A-Za-z0-9_-]+)/);
+                const reelId = match ? match[1] : '';
+
+                // Get thumbnail: prefer largest CDN image, skip extension icons
+                const imgs = Array.from(a.querySelectorAll('img'));
+                let thumbnail = null;
+                let largestArea = 0;
+                for (const img of imgs) {
+                    const src = img.src || img.getAttribute('src') || '';
+                    if (src.startsWith('chrome-extension:') || src.startsWith('moz-extension:') || src.startsWith('data:')) continue;
+                    if (src.includes('cdninstagram.com')) {
+                        const area = (img.width || 0) * (img.height || 0);
+                        if (area > largestArea) {
+                            largestArea = area;
+                            thumbnail = src;
+                        }
+                    }
+                }
+                // Fallback: use src if it's a CDN image (no size data)
+                if (!thumbnail && imgs.length > 0) {
+                    for (const img of imgs) {
+                        const src = img.src || img.getAttribute('src') || '';
+                        if (src.includes('cdninstagram.com') && !src.startsWith('chrome-extension:')) {
+                            thumbnail = src;
+                            break;
+                        }
+                    }
+                }
+
+                // Try to get view count from aria-label or nearby text
+                let viewCountText = '';
+                const ariaLabel = a.getAttribute('aria-label') || '';
+                if (ariaLabel) {
+                    const viewMatch = ariaLabel.match(/([\\d,]+)\\s*views?/i);
+                    if (viewMatch) viewCountText = viewMatch[1];
+                }
+                if (!viewCountText) {
+                    const text = a.innerText || '';
+                    const numbers = text.match(/[\\d,]+/g);
+                    if (numbers && numbers.length > 0) {
+                        viewCountText = numbers[0];
+                    }
+                }
+
+                results.push({
+                    index: i,
+                    id: reelId || null,
+                    shortcode: reelId || null,
+                    url: href.startsWith('http') ? href : `https://www.instagram.com${href}`,
+                    thumbnail_url: thumbnail,
+                    video_url: null,
+                    view_count_text: viewCountText,
+                    media_type: 'reel',
+                });
+            }
+            return results;
+        }""",
+            {"maxReels": max_reels},
+        )
+
+    async def _extract_posts_from_grid(
+        self, max_posts: int = 50
+    ) -> list[dict[str, Any]]:
+        """Extract structured post data from the posts grid page.
+
+        Returns list of dicts with basic post info available from the grid.
+        Only extracts posts (not reels) — use _extract_reels_from_grid for reels.
+        """
+        return await self._page.evaluate(
+            """({ maxPosts }) => {
+            // Only match /p/ links — exclude /reel/ to prevent mixing content types
+            const anchors = Array.from(document.querySelectorAll('a[href*="/p/"]'));
+            const results = [];
+            for (let i = 0; i < Math.min(anchors.length, maxPosts); i++) {
+                const a = anchors[i];
+                // Skip extension-injected anchors
+                if (a.href.startsWith('chrome-extension:') || a.href.startsWith('moz-extension:')) continue;
+
+                const href = a.href || '';
+                const isReel = href.includes('/reel/');
+                const type = isReel ? 'reel' : 'post';
+                const idMatch = href.match(/\/(p|reel)\/([A-Za-z0-9_-]+)/);
+                const shortcode = idMatch ? idMatch[2] : '';
+
+                // Get thumbnail: prefer largest CDN image, skip extension icons
+                const imgs = Array.from(a.querySelectorAll('img'));
+                let thumbnail = null;
+                let largestArea = 0;
+                for (const img of imgs) {
+                    const src = img.src || img.getAttribute('src') || '';
+                    if (src.startsWith('chrome-extension:') || src.startsWith('moz-extension:') || src.startsWith('data:')) continue;
+                    if (src.includes('cdninstagram.com')) {
+                        const area = (img.width || 0) * (img.height || 0);
+                        if (area > largestArea) {
+                            largestArea = area;
+                            thumbnail = src;
+                        }
+                    }
+                }
+                if (!thumbnail && imgs.length > 0) {
+                    for (const img of imgs) {
+                        const src = img.src || img.getAttribute('src') || '';
+                        if (src.includes('cdninstagram.com') && !src.startsWith('chrome-extension:')) {
+                            thumbnail = src;
+                            break;
+                        }
+                    }
+                }
+
+                results.push({
+                    index: i,
+                    id: shortcode || null,
+                    shortcode: shortcode || null,
+                    url: href.startsWith('http') ? href : `https://www.instagram.com${href}`,
+                    thumbnail_url: thumbnail,
+                    video_url: null,
+                    media_type: type,
+                });
+            }
+            return results;
+        }""",
+            {"maxPosts": max_posts},
         )
 
     # ------------------------------------------------------------------
@@ -801,15 +1343,50 @@ class InstagramExtractor:
     ) -> dict[str, Any]:
         """Scrape posts from a user's profile, scrolling to load more.
 
+        Returns structured post data extracted from the grid page.
+        Note: Only extracts image/carousel posts (/p/), not reels (/reel/).
+        Use scrape_user_reels for reel data.
+
         Returns:
-            {url, sections: {posts: text}, references?: {posts: [post_links]}}
+            {url, posts: [{id, url, thumbnail_url, media_type, ...}],
+             total_posts, sections: {posts: text}, references?: {posts: [post_links]}}
         """
         url = f"https://www.instagram.com/{username}/"
         if callbacks:
             await callbacks.on_start("user posts", url)
 
+        # Timeout guard for large accounts
         try:
-            await self._navigate_to_page(url)
+            await asyncio.wait_for(self._navigate_to_page(url), timeout=15.0)
+        except asyncio.TimeoutError:
+            logger.warning("Navigation timeout for user posts page: %s", url)
+            result = {
+                "url": url,
+                "posts": [],
+                "total_posts": 0,
+                "sections": {},
+                "warnings": [
+                    f"Navigation to {url} timed out. "
+                    f"The account may have too much content to load."
+                ],
+            }
+            if callbacks:
+                await callbacks.on_complete("user posts", result)
+            return result
+        except Exception as e:
+            logger.error("Navigation failed for user posts page %s: %s", url, e)
+            result = {
+                "url": url,
+                "posts": [],
+                "total_posts": 0,
+                "sections": {},
+                "warnings": [f"Navigation failed: {e}"],
+            }
+            if callbacks:
+                await callbacks.on_complete("user posts", result)
+            return result
+
+        try:
             await detect_rate_limit(self._page)
 
             try:
@@ -826,21 +1403,39 @@ class InstagramExtractor:
             # Wait for posts to render after scrolling
             await asyncio.sleep(1.0)
 
-            raw_result = await self._extract_root_content(["main"])
-            raw = raw_result["text"]
-            cleaned = strip_instagram_noise(raw) if raw else ""
+            # Extract structured post data from the grid (posts only, not reels)
+            posts_data = await self._extract_posts_from_grid(max_posts)
 
-            if not cleaned:
-                logger.warning("No posts extracted for user %s", username)
-
-            # Extract post/reel links as references (Instagram loads these dynamically)
+            # Extract post links as references
             post_links = await self._extract_post_links(max_posts)
 
-            result: dict[str, Any] = {"url": url, "sections": {}}
+            # Filter references to only include posts (not reels) for consistency
+            post_only_links = [ref for ref in post_links if ref.kind == "post"]
+
+            # Extract text section for backward compatibility
+            raw_result = await self._extract_root_content(["main"])
+            raw = raw_result["text"]
+            cleaned = strip_instagram_noise(raw, page_type="grid") if raw else ""
+
+            warnings: list[str] = []
+            if not posts_data and not post_links:
+                warnings.append(
+                    "No posts found. The account may be private, have no posts, "
+                    "or the page may not have fully loaded."
+                )
+
+            result: dict[str, Any] = {
+                "url": url,
+                "posts": posts_data,
+                "total_posts": len(posts_data),
+                "sections": {},
+            }
+            if warnings:
+                result["warnings"] = warnings
             if cleaned:
                 result["sections"]["posts"] = cleaned
-            if post_links:
-                result["references"] = {"posts": post_links}
+            if post_only_links:
+                result["references"] = {"posts": post_only_links}
 
             if callbacks:
                 await callbacks.on_complete("user posts", result)
@@ -850,29 +1445,51 @@ class InstagramExtractor:
             logger.error(
                 "scrape_user_posts failed for %s: %s", username, e, exc_info=True
             )
-            raise
+            # Return partial results instead of raising — the calling tool
+            # should surface warnings, not crash.
+            return {
+                "url": url,
+                "posts": posts_data if "posts_data" in locals() else [],
+                "total_posts": len(posts_data) if "posts_data" in locals() else 0,
+                "sections": {},
+                "warnings": [
+                    f"Scraping encountered an error: {e}. "
+                    f"Some or all posts may be missing. "
+                    f"Try again with a smaller max_posts value."
+                ],
+            }
 
     async def _extract_post_links(self, max_links: int = 50) -> list[Reference]:
-        """Extract post and reel links from the current page."""
+        """Extract post and reel links from the current page.
+
+        Returns references with kind='post' for /p/ links and kind='reel' for /reel/ links.
+        """
         links = await self._page.evaluate(f"""() => {{
             const anchors = Array.from(document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'));
             return anchors.slice(0, {max_links}).map(a => {{
+                // Skip extension-injected anchors
+                if (a.href.startsWith('chrome-extension:') || a.href.startsWith('moz-extension:')) return null;
                 const href = a.href;
-                const postId = href.split('/').find(p => p) || '';
+                const match = href.match(/\/(p|reel)\/([A-Za-z0-9_-]+)/);
+                const postId = match ? match[2] : '';
                 const type = href.includes('/reel/') ? 'reel' : 'post';
                 return {{
                     url: href,
                     text: `${{type}}:${{postId}}`,
-                    context: (a.innerText || '').slice(0, 100).replace(/\\s+/g, ' ').trim()
+                    context: (a.innerText || '').slice(0, 100).replace(/\\s+/g, ' ').trim(),
+                    type: type,
                 }};
-            }});
+            }}).filter(Boolean);
         }}""")
 
         from instagram_mcp_server.scraping.link_metadata import Reference
 
         return [
             Reference(
-                kind="post", url=link["url"], text=link["text"], context=link["context"]
+                kind=link["type"],
+                url=link["url"],
+                text=link["text"],
+                context=link["context"],
             )
             for link in links
             if link["url"]
@@ -884,34 +1501,136 @@ class InstagramExtractor:
         max_reels: int = 12,
         callbacks: ProgressCallback | None = None,
     ) -> dict[str, Any]:
-        """Scrape reels from a user's profile.
+        """Scrape reels from a user's profile reels page.
+
+        Returns structured reel data extracted from the grid page
+        without navigating to individual reels (avoids N+1 problem).
 
         Returns:
-            {url, sections: {reels: text}}
+            {url, reels: [{id, url, thumbnail_url, view_count_text, ...}],
+             total_reels, sections: {reels: text}, references: {reels: [...]}}
         """
         url = f"https://www.instagram.com/{username}/reels/"
         if callbacks:
             await callbacks.on_start("user reels", url)
 
-        await self._navigate_to_page(url)
-        await detect_rate_limit(self._page)
+        # Timeout guard for large accounts (max 30s for navigation + scroll)
+        import time
+
         try:
-            await self._page.wait_for_selector("main")
-        except PlaywrightTimeoutError:
-            pass
-        await handle_modal_close(self._page)
+            await asyncio.wait_for(self._navigate_to_page(url), timeout=15.0)
+        except asyncio.TimeoutError:
+            logger.warning("Navigation timeout for reels page: %s", url)
+            result = {
+                "url": url,
+                "reels": [],
+                "total_reels": 0,
+                "sections": {},
+                "warnings": [
+                    f"Navigation to {url} timed out. "
+                    f"The account may have too much content to load. "
+                    f"Try again with a smaller max_reels value."
+                ],
+            }
+            if callbacks:
+                await callbacks.on_complete("user reels", result)
+            return result
+        except Exception as e:
+            logger.error("Navigation failed for reels page %s: %s", url, e)
+            result = {
+                "url": url,
+                "reels": [],
+                "total_reels": 0,
+                "sections": {},
+                "warnings": [f"Navigation failed: {e}"],
+            }
+            if callbacks:
+                await callbacks.on_complete("user reels", result)
+            return result
 
-        scrolls = max(1, max_reels // 12)
-        await scroll_to_bottom(self._page, pause_time=0.5, max_scrolls=scrolls)
+        start_time = time.time()
+        try:
+            await detect_rate_limit(self._page)
+            try:
+                await self._page.wait_for_selector("main", timeout=10000)
+            except PlaywrightTimeoutError:
+                pass
+            await handle_modal_close(self._page)
 
-        raw_result = await self._extract_root_content(["main"])
-        raw = raw_result["text"]
-        cleaned = strip_instagram_noise(raw) if raw else ""
+            # Scroll to load more reels
+            scrolls = max(1, max_reels // 12)
+            await scroll_to_bottom(self._page, pause_time=0.5, max_scrolls=scrolls)
+            await asyncio.sleep(0.5)
 
-        result = self._single_section_result(url, "reels", cleaned)
-        if callbacks:
-            await callbacks.on_complete("user reels", result)
-        return result
+            elapsed = time.time() - start_time
+            if elapsed > 25:
+                logger.warning(
+                    "Reels extraction took %.1fs for %s, may have hit rate limit",
+                    elapsed,
+                    username,
+                )
+
+            # Extract structured reel data from the grid
+            reels_data = await self._extract_reels_from_grid(max_reels)
+
+            # Parse view_count_text into integer view_count for each reel
+            for reel in reels_data:
+                view_text = reel.get("view_count_text")
+                reel["view_count"] = _parse_number(view_text) if view_text else None
+
+            # Also extract post/reel links as references for backward compatibility
+            reel_links = await self._extract_reel_links(max_reels)
+
+            # Extract text section for backward compatibility
+            raw_result = await self._extract_root_content(["main"])
+            raw = raw_result["text"]
+            cleaned = strip_instagram_noise(raw, page_type="grid") if raw else ""
+
+            warnings: list[str] = []
+            if not reels_data and not reel_links:
+                warnings.append(
+                    "No reels found. The account may be private, have no reels, "
+                    "or the page may not have fully loaded."
+                )
+            elif len(reels_data) < max_reels and len(reel_links) >= max_reels:
+                warnings.append(
+                    f"Only extracted {len(reels_data)} of {max_reels} requested reels. "
+                    f"Increase max_reels or try scrolling more for additional results."
+                )
+
+            result: dict[str, Any] = {
+                "url": url,
+                "reels": reels_data,
+                "total_reels": len(reels_data),
+                "sections": {},
+            }
+            if warnings:
+                result["warnings"] = warnings
+            if cleaned:
+                result["sections"]["reels"] = cleaned
+            if reel_links:
+                result["references"] = {"reels": reel_links}
+
+            if callbacks:
+                await callbacks.on_complete("user reels", result)
+            return result
+        except Exception as e:
+            logger.error(
+                "scrape_user_reels failed for %s: %s", username, e, exc_info=True
+            )
+            # Return partial results instead of raising — the calling tool
+            # should surface warnings, not crash.
+            return {
+                "url": url,
+                "reels": reels_data if "reels_data" in locals() else [],
+                "total_reels": len(reels_data) if "reels_data" in locals() else 0,
+                "sections": {},
+                "warnings": [
+                    f"Scraping encountered an error: {e}. "
+                    f"Some or all reels may be missing. "
+                    f"Try again with a smaller max_reels value."
+                ],
+            }
 
     async def scrape_user_stories(
         self,
@@ -921,7 +1640,7 @@ class InstagramExtractor:
         """Scrape active stories from a user's profile.
 
         Returns:
-            {url, sections: {stories: text}}
+            {url, sections: {stories: text}, stories: [{media_url, timestamp}]}
         """
         url = f"https://www.instagram.com/stories/{username}/"
         if callbacks:
@@ -929,9 +1648,46 @@ class InstagramExtractor:
 
         await self._navigate_to_page(url)
         await detect_rate_limit(self._page)
+
+        # Check if we were redirected to the profile page (no active stories)
+        current_url = self._page.url
+        if username in current_url and "/stories/" not in current_url:
+            # Redirected to profile — no active stories
+            result = {
+                "url": url,
+                "sections": {"stories": f"No active stories for @{username}"},
+                "stories": [],
+                "warnings": [
+                    f"No active stories found for @{username}. "
+                    f"Stories expire after 24 hours."
+                ],
+            }
+            if callbacks:
+                await callbacks.on_complete("user stories", result)
+            return result
+
         try:
             await self._page.wait_for_selector("main, [role='dialog']")
         except PlaywrightTimeoutError:
+            pass
+
+        # Try to extract structured story data
+        stories_data = []
+        try:
+            stories_data = await self._page.evaluate("""() => {
+                // Stories are typically in a full-screen viewer
+                const video = document.querySelector('video');
+                const img = document.querySelector('img[src*="cdninstagram.com"]');
+                const timeEl = document.querySelector('time[datetime]');
+                return {
+                    has_video: !!video,
+                    has_image: !!img,
+                    timestamp: timeEl?.getAttribute('datetime') || null,
+                    video_src: video?.src || null,
+                    img_src: img?.src || null,
+                };
+            }""")
+        except Exception:
             pass
 
         raw_result = await self._extract_root_content(["main", "[role='dialog']"])
@@ -939,6 +1695,9 @@ class InstagramExtractor:
         cleaned = strip_instagram_noise(raw) if raw else ""
 
         result = self._single_section_result(url, "stories", cleaned)
+        if stories_data:
+            result["stories"] = [stories_data]
+
         if callbacks:
             await callbacks.on_complete("user stories", result)
         return result
@@ -965,15 +1724,16 @@ class InstagramExtractor:
             pass
         await handle_modal_close(self._page)
 
-        # Highlights are on the main profile page - scroll to ensure they load
-        await scroll_to_bottom(self._page, pause_time=1.0, max_scrolls=2)
+        # Highlights are at the TOP of the profile page — scroll to top first,
+        # then scroll down just enough to ensure they render, but not so far
+        # that we scroll past them.
+        await self._page.evaluate("""() => {
+            window.scrollTo(0, 0);
+        }""")
+        await asyncio.sleep(1.0)
 
-        raw_result = await self._extract_root_content(["main"])
-        raw = raw_result["text"]
-        cleaned = strip_instagram_noise(raw) if raw else ""
-
-        result = self._single_section_result(url, "highlights", cleaned)
-        # Try to extract highlight references
+        # Extract highlight references using multiple strategies
+        highlight_refs = []
         try:
             links = await self._page.evaluate("""() => {
                 const anchors = document.querySelectorAll('a[href*="/stories/highlights/"]');
@@ -981,12 +1741,43 @@ class InstagramExtractor:
                     kind: 'story',
                     url: a.getAttribute('href') || '',
                     text: (a.textContent || '').trim(),
+                    aria_label: (a.getAttribute('aria-label') || '').trim(),
                 }));
             }""")
             if links:
-                result["references"] = {"highlights": links}
+                for link in links:
+                    title = link.get("aria_label") or link.get("text") or ""
+                    # Clean up "View X highlight" prefix noise
+                    title = re.sub(r"^View\s+", "", title)
+                    title = re.sub(r"\s+highlight$", "", title, flags=re.IGNORECASE)
+                    title = title.strip()
+                    highlight_refs.append(
+                        {
+                            "kind": link.get("kind", "story"),
+                            "url": link.get("url", ""),
+                            "text": title or "Unknown",
+                        }
+                    )
         except Exception:
             pass
+
+        # Also extract text for backward compatibility — but only the header area
+        # where highlights appear (don't scroll past them)
+        raw_result = await self._extract_root_content(["main"])
+        raw = raw_result["text"]
+        # Use a lighter noise stripping for highlights — preserve more content
+        cleaned = strip_instagram_noise(raw, page_type="default") if raw else ""
+
+        # Truncate to just the header + highlights area
+        # Highlights appear after bio and before "Suggested for you"
+        if "Suggested for you" in cleaned:
+            cleaned = cleaned.split("Suggested for you")[0].strip()
+        if "Discover more" in cleaned:
+            cleaned = cleaned.split("Discover more")[0].strip()
+
+        result = self._single_section_result(url, "highlights", cleaned)
+        if highlight_refs:
+            result["references"] = {"highlights": highlight_refs}
 
         if callbacks:
             await callbacks.on_complete("user highlights", result)
@@ -1005,7 +1796,7 @@ class InstagramExtractor:
         Returns:
             {url, sections: {overview: text}}
         """
-        url = "https://www.instagram.com/professional_dashboard/"
+        url = "https://www.instagram.com/accounts/insights/"
         if callbacks:
             await callbacks.on_start("business insights", url)
 
@@ -1035,7 +1826,7 @@ class InstagramExtractor:
         Returns:
             {url, sections: {audience: text}}
         """
-        url = "https://www.instagram.com/professional_dashboard/?tab=audience"
+        url = "https://www.instagram.com/accounts/insights/?show_tab=audience"
         if callbacks:
             await callbacks.on_start("audience insights", url)
 
@@ -1063,7 +1854,7 @@ class InstagramExtractor:
     async def _perform_search_interaction(
         self,
         query: str,
-        search_type: Literal["users", "hashtags", "locations"] = "users",
+        search_type: Literal["users", "locations"] = "users",
     ) -> tuple[str, str]:
         """Navigate to Instagram search and extract results using search box interaction.
 
@@ -1073,7 +1864,8 @@ class InstagramExtractor:
         Returns:
             Tuple of (final_url, extracted_text)
         """
-        await self._navigate_to_page("https://www.instagram.com/")
+        # Navigate to explore page (more reliable than home page for search)
+        await self._navigate_to_page("https://www.instagram.com/explore/")
         await detect_rate_limit(self._page)
 
         try:
@@ -1086,20 +1878,41 @@ class InstagramExtractor:
         search_found = await self._find_and_fill_search(query)
 
         if not search_found:
-            logger.warning("Could not find search input on Instagram home page")
+            logger.warning("Could not find search input on Instagram explore page")
+            # Fallback: try direct URL navigation to search results
+            search_type_path = "people" if search_type == "users" else "location"
+            fallback_url = f"https://www.instagram.com/explore/search/{search_type_path}/?q={quote_plus(query)}"
+            try:
+                await self._navigate_to_page(fallback_url)
+                await asyncio.sleep(3.0)
+                raw_result = await self._extract_root_content(["main"])
+                raw = raw_result["text"]
+                cleaned = strip_instagram_noise(raw, page_type="grid") if raw else ""
+                if cleaned and not self._looks_like_home_feed(cleaned):
+                    return self._page.url, cleaned
+            except Exception:
+                pass
             return self._page.url, ""
 
-        await asyncio.sleep(2.0)  # Wait for search results to populate
+        # Wait for search results dropdown to appear
+        try:
+            await self._page.wait_for_selector(
+                '[role="listbox"], [role="menu"], div[role="dialog"]',
+                timeout=8000,
+            )
+        except PlaywrightTimeoutError:
+            logger.debug(
+                "Search results dropdown did not appear, waiting for async render"
+            )
+            await asyncio.sleep(3.0)
 
-        # Click the appropriate search tab
+        # Click the appropriate search tab (if applicable)
         if search_type == "users":
             await self._click_search_tab("Users")
-        elif search_type == "hashtags":
-            await self._click_search_tab("Hashtags")
         elif search_type == "locations":
             await self._click_search_tab("Places")
 
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2.0)
 
         # Scroll to load more results
         await self._scroll_main_scrollable_region(
@@ -1109,7 +1922,12 @@ class InstagramExtractor:
 
         raw_result = await self._extract_root_content(["main"])
         raw = raw_result["text"]
-        cleaned = strip_instagram_noise(raw) if raw else ""
+        cleaned = strip_instagram_noise(raw, page_type="grid") if raw else ""
+
+        # Validate: if it looks like a home feed, the search failed
+        if cleaned and self._looks_like_home_feed(cleaned):
+            logger.warning("Search returned home feed instead of results")
+            return self._page.url, ""
 
         return self._page.url, cleaned
 
@@ -1119,6 +1937,22 @@ class InstagramExtractor:
         Returns:
             True if search was successful, False otherwise
         """
+        # Strategy 0: Click search icon in sidebar first (Instagram often hides
+        # the search input until the search panel is opened)
+        try:
+            # Try clicking the search nav item in the left sidebar
+            search_nav = self._page.locator(
+                'a[href*="/explore"], [aria-label="Search"], '
+                '[role="button"][aria-label*="search"], '
+                'nav a[href="/explore/"]'
+            ).first
+            await search_nav.wait_for(state="visible", timeout=3000)
+            await search_nav.click()
+            await asyncio.sleep(1.0)
+            logger.debug("Clicked search navigation icon")
+        except Exception:
+            pass  # Search may already be visible
+
         # Strategy 1: Try common search input selectors
         search_selectors = [
             'input[aria-label*="Search"]',
@@ -1128,6 +1962,8 @@ class InstagramExtractor:
             'input[role="searchbox"]',
             'nav input[type="text"]',
             'header input[type="text"]',
+            'div[role="search"] input',
+            'input[name="searchBoxInput"]',
         ]
 
         for selector in search_selectors:
@@ -1173,6 +2009,19 @@ class InstagramExtractor:
             await self._page.keyboard.type(query, delay=30)
             logger.debug("Used keyboard shortcut for search")
             return True
+        except Exception:
+            pass
+
+        # Strategy 5: Try navigating to search page directly and using JS
+        try:
+            await self._navigate_to_page(
+                f"https://www.instagram.com/explore/search/people/?q={quote_plus(query)}"
+            )
+            await asyncio.sleep(2.0)
+            raw_result = await self._extract_root_content(["main"])
+            if raw_result.get("text") and len(raw_result["text"]) > 200:
+                logger.debug("Direct search URL navigation succeeded")
+                return True
         except Exception:
             pass
 
@@ -1354,7 +2203,7 @@ class InstagramExtractor:
             url, search_text = await self._perform_search_interaction(query, "users")
         except Exception as e:
             logger.warning("User search failed: %s", e)
-            url = f"https://www.instagram.com/web/search/top/?q={quote_plus(query)}"
+            url = f"https://www.instagram.com/explore/search/people/?q={quote_plus(query)}"
             search_text = ""
 
         sections: dict[str, str] = {}
@@ -1368,7 +2217,12 @@ class InstagramExtractor:
             ):
                 section_errors["search_results"] = {
                     "error_type": "page_unavailable",
-                    "error_message": "Instagram search page returned 'Page not found'. Search via direct URL navigation is limited. Try searching from Instagram's web interface instead.",
+                    "error_message": (
+                        f"Instagram search page returned 'Page not found' for query '{query}'. "
+                        f"Instagram's search requires interactive login and client-side rendering. "
+                        f"Try: (1) Ensure you're logged in, (2) Use direct username lookup instead, "
+                        f"(3) Search directly on instagram.com."
+                    ),
                     "issue_template_path": "docs/known_issues.md",
                 }
             else:
@@ -1376,73 +2230,12 @@ class InstagramExtractor:
         elif not search_text:
             section_errors["search_results"] = {
                 "error_type": "search_interaction_failed",
-                "error_message": "Could not interact with Instagram search box. Ensure you are logged in and try again.",
+                "error_message": (
+                    f"Could not interact with Instagram search for query '{query}'. "
+                    f"Instagram's search UI requires an active browser session with valid authentication. "
+                    f"Ensure you completed --login and try again."
+                ),
                 "issue_template_path": "docs/known_issues.md",
-            }
-
-        result: dict[str, Any] = {"url": url, "sections": sections}
-        if references:
-            result["references"] = references
-        if section_errors:
-            result["section_errors"] = section_errors
-        return result
-
-    async def search_hashtags(
-        self,
-        query: str,
-        max_results: int = 25,
-    ) -> dict[str, Any]:
-        """Search for Instagram hashtags.
-
-        Note: Instagram search requires being logged in and uses client-side
-        rendering. Results may be limited compared to the web interface.
-
-        Returns:
-            {url, sections: {search_results: text}}
-        """
-        query = query.lstrip("#")
-        try:
-            url, search_text = await self._perform_search_interaction(query, "hashtags")
-        except Exception as e:
-            logger.warning("Hashtag search failed: %s", e)
-            url = f"https://www.instagram.com/explore/tags/{query}/"
-            search_text = ""
-
-        sections: dict[str, str] = {}
-        references: dict[str, list[Reference]] = {}
-        section_errors: dict[str, dict[str, Any]] = {}
-
-        if search_text and search_text != _RATE_LIMITED_MSG:
-            # Check if we got actual hashtag content or just home feed
-            logger.debug("Checking hashtag search text length: %d", len(search_text))
-            is_home_feed = self._looks_like_home_feed(search_text)
-            logger.debug("Home feed detection result: %s", is_home_feed)
-
-            if (
-                "page isn't available" in search_text.lower()
-                or "page not found" in search_text.lower()
-            ):
-                section_errors["search_results"] = {
-                    "error_type": "page_unavailable",
-                    "error_message": "Instagram hashtag page returned 'Page not found'. Try searching from Instagram's web interface instead.",
-                    "issue_template_path": "docs/known_issues.md",
-                }
-            elif is_home_feed:
-                # Search returned home feed instead of hashtag results
-                section_errors["search_results"] = {
-                    "error_type": "search_interaction_failed",
-                    "error_message": f"Instagram search returned home feed instead of hashtag results for '#{query}'. This is a known limitation with Instagram's client-side search. Try searching directly on instagram.com/explore/tags/{query}/",
-                    "issue_template_path": "docs/known_issues.md",
-                    "suggested_url": f"https://www.instagram.com/explore/tags/{query}/",
-                }
-            else:
-                sections["search_results"] = search_text
-        elif not search_text:
-            section_errors["search_results"] = {
-                "error_type": "search_interaction_failed",
-                "error_message": f"Could not retrieve hashtag results for '#{query}'. Try searching directly on Instagram's web interface.",
-                "issue_template_path": "docs/known_issues.md",
-                "suggested_url": f"https://www.instagram.com/explore/tags/{query}/",
             }
 
         result: dict[str, Any] = {"url": url, "sections": sections}

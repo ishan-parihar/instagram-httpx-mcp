@@ -9,10 +9,6 @@ from instagram_mcp_server.core.exceptions import (
     AuthenticationError,
     InstagramScraperException,
 )
-from instagram_mcp_server.scraping.connection import (
-    _extract_action_area,
-    detect_connection_state,
-)
 from instagram_mcp_server.scraping.extractor import (
     ExtractedSection,
     InstagramExtractor,
@@ -523,13 +519,13 @@ class TestScrapeUserUrls:
                 "extract_page",
                 new_callable=AsyncMock,
                 return_value=extracted("Post 1\nPost 2"),
-            ) as mock_extract,
+            ),
             patch(
                 "instagram_mcp_server.scraping.extractor.asyncio.sleep",
                 new_callable=AsyncMock,
             ),
         ):
-            result = await extractor.scrape_user("test-user", {"posts"})
+            await extractor.scrape_user("test-user", {"posts"})
 
 
 class TestStripInstagramNoise:

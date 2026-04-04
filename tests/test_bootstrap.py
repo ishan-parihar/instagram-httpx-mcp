@@ -165,7 +165,9 @@ def _make_auth_ready(profile_dir):
     (profile_dir / "Default" / "Cookies").write_text("placeholder")
     cookie_path = portable_cookie_path(profile_dir)
     cookie_path.parent.mkdir(parents=True, exist_ok=True)
-    cookie_path.write_text(json.dumps([{"name": "sessionid", "domain": ".instagram.com"}]))
+    cookie_path.write_text(
+        json.dumps([{"name": "sessionid", "domain": ".instagram.com"}])
+    )
     source_state_path(profile_dir).write_text(
         json.dumps(
             {

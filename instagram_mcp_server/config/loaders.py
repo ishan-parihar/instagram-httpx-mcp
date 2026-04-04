@@ -57,6 +57,9 @@ class EnvironmentKeys:
     USE_CDP_MODE = "INSTAGRAM_USE_CDP_MODE"
     CDP_PORT = "INSTAGRAM_DEBUGGING_PORT"
 
+    # Multi-browser support
+    PREFERRED_BROWSER = "INSTAGRAM_PREFERRED_BROWSER"
+
 
 def is_interactive_environment() -> bool:
     """
@@ -173,6 +176,10 @@ def load_from_env(config: AppConfig) -> AppConfig:
                 f"Invalid {EnvironmentKeys.CDP_PORT}: '{cdp_port_env}'. Must be an integer."
             )
 
+    # Preferred browser for cookie import
+    if browser_env := os.environ.get(EnvironmentKeys.PREFERRED_BROWSER):
+        config.browser.preferred_browser = browser_env.strip().lower()
+
     return config
 
 
@@ -262,18 +269,19 @@ def load_from_args(config: AppConfig) -> AppConfig:
         help="Path to Chrome/Chromium executable (for custom browser installations)",
     )
 
-    # CDP mode configuration
+    # Browser mode configuration
     cdp_group = parser.add_mutually_exclusive_group()
     cdp_group.add_argument(
         "--cdp",
         action="store_true",
         default=None,
-        help="Use CDP mode to connect to running Brave browser (default: enabled)",
+        help="Use CDP mode to connect to running Brave browser (opt-in)",
     )
     cdp_group.add_argument(
         "--no-cdp",
         action="store_true",
-        help="Disable CDP mode (use legacy browser automation)",
+        default=None,
+        help="Use isolated browser with cookie import (default)",
     )
 
     parser.add_argument(
@@ -309,6 +317,14 @@ def load_from_args(config: AppConfig) -> AppConfig:
         default=None,
         metavar="PATH",
         help="Path to persistent browser profile directory (default: ~/.instagram-mcp/profile)",
+    )
+
+    parser.add_argument(
+        "--browser",
+        type=str,
+        default=None,
+        metavar="BROWSER",
+        help="Browser to import cookies from (brave, chrome, edge, firefox, zen, helium, chromium, opera, vivaldi, arc, librewolf, waterfox, floorp)",
     )
 
     args = parser.parse_args()
@@ -378,6 +394,9 @@ def load_from_args(config: AppConfig) -> AppConfig:
 
     if args.user_data_dir:
         config.browser.user_data_dir = args.user_data_dir
+
+    if args.browser:
+        config.browser.preferred_browser = args.browser.lower()
 
     return config
 

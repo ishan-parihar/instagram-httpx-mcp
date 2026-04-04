@@ -2,62 +2,75 @@
 Instagram Reel Analysis using Google Gemini 2.0 Flash.
 
 Fast multimodal analysis of Instagram reels without local transcription.
+Uses google-genai (the successor to the deprecated google.generativeai).
 """
 
 import asyncio
+import logging
+import os
 from pathlib import Path
 from typing import Any, Literal
 
-from fastmcp import Context, FastMCP
-
-from instagram_mcp_server.constants import TOOL_TIMEOUT_SECONDS
-from instagram_mcp_server.dependencies import get_ready_extractor, handle_auth_error
-from instagram_mcp_server.error_handler import raise_tool_error
-
-import google.generativeai as genai
 import httpx
-import logging
+from fastmcp import Context, FastMCP
+from google import genai
+from google.genai import types
+
+from instagram_mcp_server.dependencies import get_ready_extractor
+from instagram_mcp_server.error_handler import raise_tool_error
 
 logger = logging.getLogger(__name__)
 
-# Configure Gemini
-# IMPORTANT: Replace with your own API key from https://aistudio.google.com/app/apikey
-# Free tier: 15 requests/minute, 1000 requests/day
-# Can also set via environment variable: export GEMINI_API_KEY="your_key"
-GEMINI_API_KEY = (
-    "REDACTED_GOOGLE_API_KEY_2"  # May exceed quota - use your own
-)
-
-# Analysis directory
 ANALYSIS_DIR = Path.home() / ".instagram-mcp" / "gemini_analysis"
-ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-async def download_video_bytes(video_url: str) -> bytes | None:
-    """Download video as bytes for Gemini upload."""
+async def download_video_bytes(video_url: str, page=None) -> bytes | None:
+    """Download video as bytes for Gemini upload.
+
+    When a Playwright page is provided, extracts session cookies from the
+    browser context so the download request is authenticated.  Without
+    cookies Instagram CDN returns 403 Forbidden.
+    """
     try:
-        async with httpx.AsyncClient() as client:
+        headers: dict[str, str] = {
+            "Referer": "https://www.instagram.com/",
+        }
+
+        # Attach Instagram session cookies if we have a browser context
+        if page is not None:
+            try:
+                cookies = await page.context.cookies()
+                cookie_header = "; ".join(
+                    f"{c['name']}={c['value']}" for c in cookies if c.get("value")
+                )
+                if cookie_header:
+                    headers["Cookie"] = cookie_header
+            except Exception as e:
+                logger.warning("Could not extract cookies for video download: %s", e)
+
+        async with httpx.AsyncClient(headers=headers) as client:
             response = await client.get(video_url, timeout=30.0)
             if response.status_code == 200:
                 return response.content
+            logger.warning(
+                "Video download returned HTTP %d for %s",
+                response.status_code,
+                video_url[:80],
+            )
         return None
     except Exception as e:
-        logger.error(f"Download error: {e}")
+        logger.error("Download error: %s", e)
         return None
 
 
 def get_gemini_api_key() -> str:
-    """Get Gemini API key from config or environment."""
-    import os
-
+    """Get Gemini API key from environment variable only."""
     env_key = os.environ.get("GEMINI_API_KEY")
-    if env_key and env_key != "YOUR_API_KEY_HERE":
+    if env_key:
         return env_key
-    if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_API_KEY_HERE":
-        return GEMINI_API_KEY
     raise ValueError(
         "Gemini API key not configured. "
-        "Set GEMINI_API_KEY environment variable or edit gemini_analysis.py. "
+        "Set GEMINI_API_KEY environment variable. "
         "Get key from: https://aistudio.google.com/app/apikey"
     )
 
@@ -70,7 +83,7 @@ async def analyze_with_gemini(
     is_url: bool = False,
 ) -> dict[str, Any]:
     """
-    Analyze video using Gemini 2.0 Flash.
+    Analyze video using Gemini 2.0 Flash via google-genai.
 
     Args:
         video_data: Video bytes or URL string
@@ -82,9 +95,7 @@ async def analyze_with_gemini(
     """
     try:
         api_key = get_gemini_api_key()
-        genai.configure(api_key=api_key)
-
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        client = genai.Client(api_key=api_key)
 
         # Build prompt based on analysis type
         prompts = {
@@ -132,27 +143,40 @@ Respond in JSON format with keys: summary, transcript, topics (array), quotes (a
         # Prepare content for Gemini
         if is_url:
             # Gemini can fetch from URL directly
-            content = [prompt, video_data]
+            contents = [
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_text(text=prompt),
+                        types.Part.from_uri(
+                            file_uri=video_data,
+                            mime_type="video/mp4",
+                        ),
+                    ],
+                )
+            ]
         else:
-            # Upload video bytes
-            from google.generativeai.types import File
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-                f.write(video_data)
-                temp_path = f.name
-
-            try:
-                uploaded = genai.upload_file(path=temp_path)
-                content = [prompt, uploaded]
-            finally:
-                import os
-
-                os.unlink(temp_path)
+            # Upload video bytes via inline data
+            contents = [
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_text(text=prompt),
+                        types.Part.from_bytes(
+                            data=video_data,
+                            mime_type="video/mp4",
+                        ),
+                    ],
+                )
+            ]
 
         # Generate content
         response = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: model.generate_content(content)
+            None,
+            lambda: client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=contents,
+            ),
         )
 
         # Parse response
@@ -178,7 +202,7 @@ Respond in JSON format with keys: summary, transcript, topics (array), quotes (a
             return result
 
         except json.JSONDecodeError as e:
-            logger.warning(f"JSON parse error: {e}, returning raw text")
+            logger.warning("JSON parse error: %s, returning raw text", e)
             return {
                 "raw_response": response_text,
                 "model": "gemini-2.0-flash",
@@ -187,7 +211,7 @@ Respond in JSON format with keys: summary, transcript, topics (array), quotes (a
             }
 
     except Exception as e:
-        logger.error(f"Gemini analysis error: {e}")
+        logger.error("Gemini analysis error: %s", e)
         raise
 
 
@@ -199,7 +223,6 @@ def register_gemini_tools(mcp: FastMCP) -> None:
         title="Analyze Reel with Gemini",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"reels", "analysis", "ai", "gemini"},
-        exclude_args=["extractor"],
     )
     async def analyze_reel_with_gemini(
         reel_url: str,
@@ -245,33 +268,38 @@ def register_gemini_tools(mcp: FastMCP) -> None:
             # Extract reel ID and video URL
             reel_id = reel_url.rstrip("/").split("/reel/")[-1].split("?")[0]
 
-            logger.info(f"Analyzing reel {reel_id} with Gemini ({analysis_type})")
+            logger.info("Analyzing reel %s with Gemini (%s)", reel_id, analysis_type)
 
             await ctx.report_progress(
                 progress=10, total=100, message="Fetching reel metadata..."
             )
 
-            reel_result = await extractor.extract_page(reel_url, section_name="main")
+            # Navigate to reel page to extract the actual CDN video URL
+            await extractor._navigate_to_page(reel_url)
+            await asyncio.sleep(1.0)
 
-            # Extract video URL
-            video_url = None
-            if reel_result.get("references"):
-                for ref in reel_result["references"].get("main", []):
-                    if "video" in ref.get("kind", "").lower() or "/reel/" in ref.get(
-                        "url", ""
-                    ):
-                        video_url = ref.get("url")
-                        break
+            video_url = await extractor.extract_video_url()
+            if not video_url:
+                thumbnail_url = await extractor.extract_thumbnail_url()
+                if thumbnail_url:
+                    logger.info("Video URL not found, using thumbnail for analysis")
+                    video_url = thumbnail_url
+                else:
+                    og_data = await extractor.extract_og_metadata()
+                    video_url = og_data.get("video") or og_data.get("video:secure_url")
 
             if not video_url:
-                raise Exception("Could not extract video URL from reel")
+                raise Exception(
+                    "Could not extract video URL from reel. "
+                    "The reel may be private, deleted, or Instagram's structure changed."
+                )
 
             await ctx.report_progress(
                 progress=25, total=100, message="Downloading video..."
             )
 
-            # Download video bytes
-            video_bytes = await download_video_bytes(video_url)
+            # Download video bytes (with authenticated cookies)
+            video_bytes = await download_video_bytes(video_url, extractor._page)
 
             if not video_bytes:
                 raise Exception("Video download failed")
@@ -290,6 +318,7 @@ def register_gemini_tools(mcp: FastMCP) -> None:
             await ctx.report_progress(progress=100, total=100, message="Complete")
 
             # Save analysis to file
+            ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
             analysis_file = ANALYSIS_DIR / f"{reel_id}_{analysis_type}.json"
             import json
 
@@ -314,7 +343,6 @@ def register_gemini_tools(mcp: FastMCP) -> None:
         title="Bulk Analyze User Reels with Gemini",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"reels", "analysis", "ai", "gemini", "bulk"},
-        exclude_args=["extractor"],
     )
     async def bulk_analyze_reels_with_gemini(
         username: str,
@@ -350,7 +378,10 @@ def register_gemini_tools(mcp: FastMCP) -> None:
             )
 
             logger.info(
-                f"Bulk analyzing @{username} reels (max={max_reels}, type={analysis_type})"
+                "Bulk analyzing @%s reels (max=%d, type=%s)",
+                username,
+                max_reels,
+                analysis_type,
             )
 
             # Get user reels
@@ -362,7 +393,7 @@ def register_gemini_tools(mcp: FastMCP) -> None:
 
             if not reel_links:
                 raise_tool_error(
-                    Exception(f"No reels found for @{username}"),
+                    Exception("No reels found for @%s" % username),
                     "bulk_analyze_reels_with_gemini",
                 )
 
@@ -380,24 +411,38 @@ def register_gemini_tools(mcp: FastMCP) -> None:
                 )
 
                 try:
-                    # Analyze each reel
-                    result = await analyze_reel_with_gemini.callback(
-                        reel_url=reel_url,
-                        analysis_type=analysis_type,
-                        ctx=ctx,
-                        extractor=extractor,
+                    # Navigate to reel page to extract the actual video URL
+                    await extractor._navigate_to_page(reel_url)
+                    await asyncio.sleep(1.0)
+
+                    video_url = await extractor.extract_video_url()
+                    if not video_url:
+                        # Fallback: try thumbnail
+                        thumbnail_url = await extractor.extract_thumbnail_url()
+                        if thumbnail_url:
+                            video_url = thumbnail_url
+                        else:
+                            raise Exception("Could not extract video or thumbnail URL")
+
+                    # Download video bytes from the actual CDN URL (with cookies)
+                    video_bytes = await download_video_bytes(video_url, extractor._page)
+                    if not video_bytes:
+                        raise Exception("Video download failed")
+
+                    result = await analyze_with_gemini(
+                        video_bytes, analysis_type=analysis_type, is_url=False
                     )
 
                     analyses.append(
                         {
                             "reel_id": reel_id,
                             "status": "success",
-                            "analysis": result.get("results", {}),
+                            "analysis": result,
                         }
                     )
 
                 except Exception as e:
-                    logger.warning(f"Failed to analyze {reel_id}: {e}")
+                    logger.warning("Failed to analyze %s: %s", reel_id, e)
                     analyses.append(
                         {"reel_id": reel_id, "status": "failed", "error": str(e)}
                     )

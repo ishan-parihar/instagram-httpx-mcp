@@ -193,7 +193,9 @@ def test_build_issue_diagnostics_covers_required_bug_report_fields(
     assert "- MCP client:" in issue_body
     assert "- Error:" in issue_body
     assert "- Expected behavior:" in issue_body
-    assert "1. Run a fresh local `uv run -m instagram_mcp_server --login`." in issue_body
+    assert (
+        "1. Run a fresh local `uv run -m instagram_mcp_server --login`." in issue_body
+    )
     assert "Call `search_users` again" in issue_body
     assert "## Additional Diagnostics" in issue_body
     assert "### Session State" in issue_body

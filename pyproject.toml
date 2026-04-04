@@ -35,11 +35,18 @@ classifiers = [
 ]
 dependencies = [
     "fastmcp>=3.0.0",
-    "google-generativeai>=0.8.6",
+    "google-genai>=1.0.0",
     "httpx>=0.28.1",
     "inquirer>=3.4.0",
     "patchright>=1.40.0",
     "python-dotenv>=1.1.1",
+]
+
+[project.optional-dependencies]
+transcription = [
+    # Requires the 'caption' CLI tool (Whisper-based speech-to-text).
+    # Install separately: https://github.com/oliverguhr/ caption
+    # Alternative: Use analyze_reel_with_gemini for AI transcription without local deps.
 ]
 
 [project.urls]

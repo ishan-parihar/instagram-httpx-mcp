@@ -78,10 +78,6 @@
       "description": "Search for Instagram users by username or name"
     },
     {
-      "name": "search_hashtags",
-      "description": "Search for hashtags and get post counts"
-    },
-    {
       "name": "search_locations",
       "description": "Search for locations and tagged posts"
     },

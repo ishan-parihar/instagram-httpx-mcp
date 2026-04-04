@@ -38,7 +38,6 @@ from instagram_mcp_server.session_state import (
     runtime_profiles_root,
     source_state_path,
 )
-from instagram_mcp_server.setup import interactive_login
 
 logger = logging.getLogger(__name__)
 
@@ -489,15 +488,17 @@ async def _run_login_flow() -> None:
     """Run interactive login flow."""
     _state.auth_state = AuthState.IN_PROGRESS
 
-    # Check if CDP mode is enabled
+    from instagram_mcp_server.config import get_config
     from instagram_mcp_server.drivers.browser import _cdp_mode_enabled
 
     if _cdp_mode_enabled():
         success = await _cdp_login_flow()
     else:
-        from instagram_mcp_server.setup import interactive_login
+        from instagram_mcp_server.cookie_import import import_cookies_interactive
 
-        success = await interactive_login(get_profile_dir(), warm_up=True)
+        config = get_config()
+        browser_id = config.browser.preferred_browser or None
+        success = import_cookies_interactive(browser_id=browser_id)
 
     if not success:
         raise AuthenticationBootstrapFailedError(
@@ -532,7 +533,6 @@ async def _cdp_login_flow() -> bool:
 
         try:
             import subprocess
-            import sys
 
             # Find Brave executable
             brave_paths = [

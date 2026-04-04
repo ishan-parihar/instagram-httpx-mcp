@@ -29,6 +29,7 @@ class SourceState:
     created_at: str
     profile_path: str
     cookies_path: str
+    preferred_browser: str | None = None
 
 
 @dataclass
@@ -153,9 +154,33 @@ def _is_container_runtime() -> bool:
         Path("/proc/1/mountinfo"),
         Path("/proc/self/mountinfo"),
     ):
-        if _path_contains_markers(probe, markers) or _root_mount_uses_overlay(probe):
+        if _root_mount_uses_overlay(probe):
+            return True
+        if _root_mount_contains_markers(probe, markers):
             return True
 
+    return False
+
+
+def _root_mount_contains_markers(path: Path, markers: tuple[str, ...]) -> bool:
+    """Check if the ROOT mount line (mount point /) contains container markers."""
+    if not path.exists():
+        return False
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return False
+    for line in lines:
+        if " - " not in line:
+            continue
+        left, right = line.split(" - ", maxsplit=1)
+        left_fields = left.split()
+        right_fields = right.split()
+        if len(left_fields) < 5 or not right_fields:
+            continue
+        if left_fields[4] == "/":
+            line_lower = line.lower()
+            return any(marker in line_lower for marker in markers)
     return False
 
 
@@ -208,7 +233,11 @@ def load_source_state(source_profile_dir: Path | None = None) -> SourceState | N
         return None
 
 
-def write_source_state(source_profile_dir: Path | None = None) -> SourceState:
+def write_source_state(
+    source_profile_dir: Path | None = None,
+    *,
+    preferred_browser: str | None = None,
+) -> SourceState:
     """Write a fresh source session generation after successful login."""
     profile_dir = (
         (source_profile_dir or get_source_profile_dir()).expanduser().resolve()
@@ -220,6 +249,7 @@ def write_source_state(source_profile_dir: Path | None = None) -> SourceState:
         created_at=utcnow_iso(),
         profile_path=str(profile_dir),
         cookies_path=str(portable_cookie_path(profile_dir)),
+        preferred_browser=preferred_browser,
     )
     _write_json(source_state_path(profile_dir), asdict(state))
     return state

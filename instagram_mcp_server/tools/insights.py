@@ -22,23 +22,112 @@ from instagram_mcp_server.scraping.link_metadata import Reference
 logger = logging.getLogger(__name__)
 
 _DASHBOARD_URL = "https://www.instagram.com/accounts/insights/"
-_DASHBOARD_TABS = {
-    "overview": "",
-    "audience": "?show_tab=audience",
-    "content": "?show_tab=content",
-    "activity": "?show_tab=activity",
+
+_DASHBOARD_TAB_SELECTORS = {
+    "audience": '[data-tab-id="audience"], button:has-text("Audience"), [aria-label*="Audience"]',
+    "content": '[data-tab-id="content"], button:has-text("Content"), [aria-label*="Content"]',
+    "activity": '[data-tab-id="activity"], button:has-text("Activity"), [aria-label*="Activity"]',
+}
+
+_TAB_MARKERS = {
+    "audience": ["Top locations", "Age range", "Gender"],
+    "content": ["Top content", "Content type", "Media type"],
+    "activity": ["Profile visits", "Website taps", "Emails"],
+}
+
+_TAB_URLS = {
+    "audience": f"{_DASHBOARD_URL}?show_tab=audience",
+    "content": f"{_DASHBOARD_URL}?show_tab=content",
+    "activity": f"{_DASHBOARD_URL}?show_tab=activity",
 }
 
 
 def register_insights_tools(mcp: FastMCP) -> None:
     """Register all insights-related tools with the MCP server."""
 
+    async def _navigate_to_dashboard_tab(
+        extractor: Any, tab: str, ctx: Context
+    ) -> None:
+        """Navigate to a specific tab in the Professional Dashboard.
+
+        Navigates to the dashboard, then switches tabs via URL params or button clicks.
+        Modifies the extractor's page in-place. Does NOT return a URL — callers
+        should extract text from the already-loaded page rather than re-navigating.
+        """
+        await extractor._navigate_to_page(_DASHBOARD_URL)
+
+        if tab == "overview":
+            return
+
+        tab_url = _TAB_URLS.get(tab, _DASHBOARD_URL)
+        await extractor._page.goto(
+            tab_url, wait_until="domcontentloaded", timeout=30000
+        )
+
+        markers = _TAB_MARKERS.get(tab, [])
+
+        try:
+            await extractor._page.wait_for_function(
+                """(markers) => {
+                    const text = (document.querySelector('main') || document.body).innerText || '';
+                    return markers.some(m => text.includes(m));
+                }""",
+                arg=markers,
+                timeout=10000,
+            )
+            logger.info("Tab '%s' verified via content markers", tab)
+        except Exception:
+            selector = _DASHBOARD_TAB_SELECTORS.get(tab, "")
+            if selector:
+                try:
+                    tab_button = extractor._page.locator(selector).first
+                    await tab_button.wait_for(state="visible", timeout=5000)
+                    await tab_button.click()
+                    await extractor._page.wait_for_function(
+                        """(markers) => {
+                            const text = (document.querySelector('main') || document.body).innerText || '';
+                            return markers.some(m => text.includes(m));
+                        }""",
+                        arg=markers,
+                        timeout=10000,
+                    )
+                    logger.info("Tab '%s' switched via button click", tab)
+                except Exception:
+                    logger.warning(
+                        "Tab '%s' verification failed after click attempt", tab
+                    )
+
+    async def _extract_insight(
+        extractor: Any, tab: str, ctx: Context, section_name: str, progress_msg: str
+    ) -> dict[str, Any]:
+        """Shared extraction flow for all insight tabs."""
+        await ctx.report_progress(progress=0, total=100, message=progress_msg)
+
+        await _navigate_to_dashboard_tab(extractor, tab, ctx)
+        extracted = await extractor.extract_current_page(section_name=section_name)
+
+        sections: dict[str, str] = {}
+        references: dict[str, list[Reference]] = {}
+        if extracted.text and extracted.text != _RATE_LIMITED_MSG:
+            sections[section_name] = extracted.text
+            if extracted.references:
+                references[section_name] = extracted.references
+
+        await ctx.report_progress(progress=100, total=100, message="Complete")
+
+        result: dict[str, Any] = {
+            "url": extractor._page.url,
+            "sections": sections,
+        }
+        if references:
+            result["references"] = references
+        return result
+
     @mcp.tool(
         timeout=TOOL_TIMEOUT_SECONDS,
         title="Get Business Insights",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"insights", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_business_insights(
         ctx: Context,
@@ -63,30 +152,13 @@ def register_insights_tools(mcp: FastMCP) -> None:
                 ctx, tool_name="get_business_insights"
             )
             logger.info("Scraping business insights (time_range=%s)", time_range)
-
-            await ctx.report_progress(
-                progress=0, total=100, message="Navigating to Professional Dashboard"
+            return await _extract_insight(
+                extractor,
+                "overview",
+                ctx,
+                "overview",
+                "Navigating to Professional Dashboard",
             )
-
-            url = _DASHBOARD_URL
-            extracted = await extractor.extract_page(url, section_name="overview")
-
-            sections: dict[str, str] = {}
-            references: dict[str, list[Reference]] = {}
-            if extracted.text and extracted.text != _RATE_LIMITED_MSG:
-                sections["overview"] = extracted.text
-                if extracted.references:
-                    references["overview"] = extracted.references
-
-            await ctx.report_progress(progress=100, total=100, message="Complete")
-
-            result: dict[str, Any] = {
-                "url": url,
-                "sections": sections,
-            }
-            if references:
-                result["references"] = references
-            return result
 
         except AuthenticationError as e:
             try:
@@ -94,14 +166,13 @@ def register_insights_tools(mcp: FastMCP) -> None:
             except Exception as relogin_exc:
                 raise_tool_error(relogin_exc, "get_business_insights")
         except Exception as e:
-            raise_tool_error(e, "get_business_insights")  # NoReturn
+            raise_tool_error(e, "get_business_insights")
 
     @mcp.tool(
         timeout=TOOL_TIMEOUT_SECONDS,
         title="Get Audience Insights",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"insights", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_audience_insights(
         ctx: Context,
@@ -124,30 +195,13 @@ def register_insights_tools(mcp: FastMCP) -> None:
                 ctx, tool_name="get_audience_insights"
             )
             logger.info("Scraping audience insights")
-
-            await ctx.report_progress(
-                progress=0, total=100, message="Navigating to audience tab"
+            return await _extract_insight(
+                extractor,
+                "audience",
+                ctx,
+                "audience",
+                "Navigating to audience tab",
             )
-
-            url = f"{_DASHBOARD_URL}{_DASHBOARD_TABS['audience']}"
-            extracted = await extractor.extract_page(url, section_name="audience")
-
-            sections: dict[str, str] = {}
-            references: dict[str, list[Reference]] = {}
-            if extracted.text and extracted.text != _RATE_LIMITED_MSG:
-                sections["audience"] = extracted.text
-                if extracted.references:
-                    references["audience"] = extracted.references
-
-            await ctx.report_progress(progress=100, total=100, message="Complete")
-
-            result: dict[str, Any] = {
-                "url": url,
-                "sections": sections,
-            }
-            if references:
-                result["references"] = references
-            return result
 
         except AuthenticationError as e:
             try:
@@ -155,14 +209,13 @@ def register_insights_tools(mcp: FastMCP) -> None:
             except Exception as relogin_exc:
                 raise_tool_error(relogin_exc, "get_audience_insights")
         except Exception as e:
-            raise_tool_error(e, "get_audience_insights")  # NoReturn
+            raise_tool_error(e, "get_audience_insights")
 
     @mcp.tool(
         timeout=TOOL_TIMEOUT_SECONDS,
         title="Get Content Insights",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"insights", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_content_insights(
         ctx: Context,
@@ -187,30 +240,13 @@ def register_insights_tools(mcp: FastMCP) -> None:
                 ctx, tool_name="get_content_insights"
             )
             logger.info("Scraping content insights (time_range=%s)", time_range)
-
-            await ctx.report_progress(
-                progress=0, total=100, message="Navigating to content tab"
+            return await _extract_insight(
+                extractor,
+                "content",
+                ctx,
+                "content",
+                "Navigating to content tab",
             )
-
-            url = f"{_DASHBOARD_URL}{_DASHBOARD_TABS['content']}"
-            extracted = await extractor.extract_page(url, section_name="content")
-
-            sections: dict[str, str] = {}
-            references: dict[str, list[Reference]] = {}
-            if extracted.text and extracted.text != _RATE_LIMITED_MSG:
-                sections["content"] = extracted.text
-                if extracted.references:
-                    references["content"] = extracted.references
-
-            await ctx.report_progress(progress=100, total=100, message="Complete")
-
-            result: dict[str, Any] = {
-                "url": url,
-                "sections": sections,
-            }
-            if references:
-                result["references"] = references
-            return result
 
         except AuthenticationError as e:
             try:
@@ -218,14 +254,13 @@ def register_insights_tools(mcp: FastMCP) -> None:
             except Exception as relogin_exc:
                 raise_tool_error(relogin_exc, "get_content_insights")
         except Exception as e:
-            raise_tool_error(e, "get_content_insights")  # NoReturn
+            raise_tool_error(e, "get_content_insights")
 
     @mcp.tool(
         timeout=TOOL_TIMEOUT_SECONDS,
         title="Get Activity Insights",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"insights", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_activity_insights(
         ctx: Context,
@@ -250,30 +285,13 @@ def register_insights_tools(mcp: FastMCP) -> None:
                 ctx, tool_name="get_activity_insights"
             )
             logger.info("Scraping activity insights (time_range=%s)", time_range)
-
-            await ctx.report_progress(
-                progress=0, total=100, message="Navigating to activity tab"
+            return await _extract_insight(
+                extractor,
+                "activity",
+                ctx,
+                "activity",
+                "Navigating to activity tab",
             )
-
-            url = f"{_DASHBOARD_URL}{_DASHBOARD_TABS['activity']}"
-            extracted = await extractor.extract_page(url, section_name="activity")
-
-            sections: dict[str, str] = {}
-            references: dict[str, list[Reference]] = {}
-            if extracted.text and extracted.text != _RATE_LIMITED_MSG:
-                sections["activity"] = extracted.text
-                if extracted.references:
-                    references["activity"] = extracted.references
-
-            await ctx.report_progress(progress=100, total=100, message="Complete")
-
-            result: dict[str, Any] = {
-                "url": url,
-                "sections": sections,
-            }
-            if references:
-                result["references"] = references
-            return result
 
         except AuthenticationError as e:
             try:
@@ -281,4 +299,4 @@ def register_insights_tools(mcp: FastMCP) -> None:
             except Exception as relogin_exc:
                 raise_tool_error(relogin_exc, "get_activity_insights")
         except Exception as e:
-            raise_tool_error(e, "get_activity_insights")  # NoReturn
+            raise_tool_error(e, "get_activity_insights")

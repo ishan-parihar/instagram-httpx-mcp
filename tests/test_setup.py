@@ -51,6 +51,11 @@ def _patch_login_deps(
         or MagicMock(return_value=SimpleNamespace(login_generation="gen-1")),
     )
     monkeypatch.setattr("instagram_mcp_server.setup.asyncio.sleep", AsyncMock())
+    # Skip interactive browser selection in tests (default to brave)
+    monkeypatch.setattr(
+        "instagram_mcp_server.setup._choose_browser_or_auto",
+        lambda: "brave",
+    )
 
 
 @pytest.mark.asyncio
@@ -119,6 +124,11 @@ async def test_interactive_login_passes_chrome_path_to_browser_manager(
     config.browser.chrome_path = "/custom/chrome"
 
     _patch_login_deps(monkeypatch, browser_factory=fake_browser_manager, config=config)
+    # Ensure find_browser_executable returns None so chrome_path fallback is used
+    monkeypatch.setattr(
+        "instagram_mcp_server.setup.find_browser_executable",
+        lambda profile: None,
+    )
 
     await interactive_login(tmp_path / "profile")
 
@@ -143,6 +153,11 @@ async def test_interactive_login_forwards_all_browser_params(monkeypatch, tmp_pa
     config.browser.viewport_height = 1080
 
     _patch_login_deps(monkeypatch, browser_factory=fake_browser_manager, config=config)
+    # Ensure find_browser_executable returns None so chrome_path fallback is used
+    monkeypatch.setattr(
+        "instagram_mcp_server.setup.find_browser_executable",
+        lambda profile: None,
+    )
 
     profile = tmp_path / "profile"
     await interactive_login(profile)

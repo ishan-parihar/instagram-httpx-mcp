@@ -1,7 +1,13 @@
 import logging
 
-from instagram_mcp_server.debug_trace import get_trace_dir, reset_trace_state_for_testing
-from instagram_mcp_server.logging_config import configure_logging, teardown_trace_logging
+from instagram_mcp_server.debug_trace import (
+    get_trace_dir,
+    reset_trace_state_for_testing,
+)
+from instagram_mcp_server.logging_config import (
+    configure_logging,
+    teardown_trace_logging,
+)
 
 
 def setup_function():

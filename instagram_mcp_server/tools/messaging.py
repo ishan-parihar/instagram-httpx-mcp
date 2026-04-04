@@ -30,7 +30,6 @@ def register_messaging_tools(mcp: FastMCP) -> None:
         title="Get Direct Inbox",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"messaging", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_direct_inbox(
         ctx: Context,
@@ -75,7 +74,6 @@ def register_messaging_tools(mcp: FastMCP) -> None:
         title="Get DM Conversation",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"messaging", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_dm_conversation(
         ctx: Context,
@@ -141,7 +139,6 @@ def register_messaging_tools(mcp: FastMCP) -> None:
         title="Send DM",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"messaging", "actions"},
-        exclude_args=["extractor"],
     )
     async def send_dm(
         username: str,

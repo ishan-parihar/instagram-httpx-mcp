@@ -1,9 +1,6 @@
 """Tests for compact Instagram reference extraction helpers."""
 
-from urllib.parse import quote
-
 from instagram_mcp_server.scraping.link_metadata import (
-    RawReference,
     build_references,
     classify_link,
     dedupe_references,
@@ -91,36 +88,6 @@ class TestBuildReferences:
                 "url": "https://www.instagram.com/reel/DEF456/",
                 "text": "Funny reel",
                 "context": "reels",
-            },
-        ]
-
-    def test_extracts_hashtag_urls(self):
-        references = build_references(
-            [
-                {
-                    "href": "https://www.instagram.com/explore/tags/travel/",
-                    "text": "#travel",
-                },
-                {
-                    "href": "https://www.instagram.com/explore/tags/photography/",
-                    "text": "#photography",
-                },
-            ],
-            "posts",
-        )
-
-        assert references == [
-            {
-                "kind": "hashtag",
-                "url": "https://www.instagram.com/explore/tags/travel/",
-                "text": "#travel",
-                "context": "posts",
-            },
-            {
-                "kind": "hashtag",
-                "url": "https://www.instagram.com/explore/tags/photography/",
-                "text": "#photography",
-                "context": "posts",
             },
         ]
 
@@ -272,10 +239,6 @@ class TestNormalizeUrl:
         url = normalize_url("https://www.instagram.com/natgeo/")
         assert url == "https://www.instagram.com/natgeo/"
 
-    def test_preserves_path_for_hashtags(self):
-        url = normalize_url("https://www.instagram.com/explore/tags/travel/")
-        assert url == "https://www.instagram.com/explore/tags/travel/"
-
 
 class TestClassifyLink:
     def test_user_profile_url(self):
@@ -294,10 +257,6 @@ class TestClassifyLink:
     def test_reel_url(self):
         result = classify_link("https://www.instagram.com/reel/DEF456/")
         assert result == ("reel", "https://www.instagram.com/reel/DEF456/")
-
-    def test_hashtag_url(self):
-        result = classify_link("https://www.instagram.com/explore/tags/travel/")
-        assert result == ("hashtag", "https://www.instagram.com/explore/tags/travel/")
 
     def test_location_url(self):
         result = classify_link(

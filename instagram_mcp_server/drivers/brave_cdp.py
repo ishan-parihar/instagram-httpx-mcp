@@ -9,7 +9,6 @@ the real browser's fingerprint and session.
 import logging
 import subprocess
 import sys
-from typing import Any
 
 from patchright.async_api import Browser, Playwright, async_playwright
 

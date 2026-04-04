@@ -92,12 +92,12 @@ Instagram may temporarily block scraping operations that make too many requests 
 
 **Mitigation:**
 - Wait 5-10 minutes between scraping operations
-- Use CDP mode (default) which uses your existing browser session
+- Use cookie import mode (default) which uses your real authenticated session
 - Avoid scraping large numbers of posts/users in rapid succession
 
 ## Recommendations
 
-1. **Use CDP mode** (enabled by default) - Connects to your existing Brave browser session to avoid bot detection
+1. **Use cookie import mode** (enabled by default) — Automatically imports cookies from your running browser into an isolated Patchright Chromium instance. Zero UX interference, no bot detection.
 
 2. **Extract references** - Many tools return post/profile links as references. Use these for follow-up operations.
 
@@ -118,8 +118,8 @@ Instagram may temporarily block scraping operations that make too many requests 
 
 If you encounter scraping issues not documented here:
 
-1. Check if you're logged into Instagram in your Brave browser
-2. Verify Brave is running with `--remote-debugging-port=9222`
+1. Check if your Instagram session is still valid (cookies at `~/.instagram-mcp/cookies.json`)
+2. Verify you're logged into Instagram in your source browser
 3. Check for rate limiting (wait and retry)
 4. Review the structured error response for details
 5. File an issue with the error message and affected tool name

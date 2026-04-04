@@ -53,6 +53,8 @@ class TestConnectToBrave:
     @pytest.mark.asyncio
     @pytest.mark.skipif(brave_running(), reason="Brave is running")
     async def test_raises_when_brave_not_running(self):
-        """Should raise ConnectionError when Brave is not running."""
-        with pytest.raises(ConnectionError):
+        """Should raise CDPConnectionError when Brave is not running."""
+        from instagram_mcp_server.exceptions import CDPConnectionError
+
+        with pytest.raises(CDPConnectionError):
             await connect_to_brave()

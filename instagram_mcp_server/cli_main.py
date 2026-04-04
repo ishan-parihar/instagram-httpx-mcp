@@ -121,7 +121,8 @@ def get_profile_and_exit() -> None:
     logger.info(f"Instagram MCP Server v{version} - Session Creation mode")
 
     user_data_dir = config.browser.user_data_dir
-    success = run_profile_creation(user_data_dir)
+    browser_id = config.browser.preferred_browser
+    success = run_profile_creation(user_data_dir, browser_id=browser_id)
 
     sys.exit(0 if success else 1)
 
@@ -196,18 +197,41 @@ def profile_info_and_exit() -> None:
         from instagram_mcp_server.drivers.browser import _cdp_mode_enabled
 
         if _cdp_mode_enabled():
-            # Use CDP connection for status check
+            # Use CDP connection for status check — multi-browser
             from instagram_mcp_server.drivers.brave_cdp import (
                 connect_to_brave,
                 verify_instagram_session,
-                find_brave_process,
+            )
+            from instagram_mcp_server.cookie_import import (
+                find_browser_with_cdp,
+                find_any_browser_with_cdp,
+                BROWSER_REGISTRY,
             )
 
             try:
-                # Check if Brave is running
-                if not find_brave_process():
-                    print("⚠️  Brave browser not running with remote debugging")
-                    return False
+                # Try the preferred browser first, then scan all Chromium browsers
+                browser_id = config.browser.preferred_browser
+                if browser_id:
+                    pid = find_browser_with_cdp(browser_id)
+                    if pid is None:
+                        prof = BROWSER_REGISTRY.get(browser_id, {})
+                        prof_name = getattr(prof, "name", browser_id)
+                        print(f"⚠️  {prof_name} not running with remote debugging")
+                        # Fall back to scanning all Chromium browsers
+                        result = find_any_browser_with_cdp()
+                        if result is None:
+                            return False
+                        browser_id, pid = result
+                        prof = BROWSER_REGISTRY[browser_id]
+                        print(f"ℹ️  Found {prof.name} with CDP instead (PID: {pid})")
+                else:
+                    result = find_any_browser_with_cdp()
+                    if result is None:
+                        print("⚠️  No Chromium browser running with remote debugging")
+                        return False
+                    browser_id, pid = result
+                    prof = BROWSER_REGISTRY[browser_id]
+                    print(f"ℹ️  Detected {prof.name} with CDP (PID: {pid})")
 
                 # Connect and verify
                 browser = await connect_to_brave(timeout=10)

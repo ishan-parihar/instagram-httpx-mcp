@@ -1,5 +1,5 @@
 """
-Instagram search tools for users, hashtags, and locations.
+Instagram search tools for users and locations.
 
 Uses innerText extraction for resilient search result capture.
 """
@@ -25,7 +25,6 @@ def register_search_tools(mcp: FastMCP) -> None:
         title="Search Users",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"search", "scraping"},
-        exclude_args=["extractor"],
     )
     async def search_users(
         query: str,
@@ -77,75 +76,30 @@ def register_search_tools(mcp: FastMCP) -> None:
             except Exception as relogin_exc:
                 raise_tool_error(relogin_exc, "search_users")
         except Exception as e:
-            raise_tool_error(e, "search_users")  # NoReturn
-
-    @mcp.tool(
-        timeout=TOOL_TIMEOUT_SECONDS,
-        title="Search Hashtags",
-        annotations={"readOnlyHint": True, "openWorldHint": True},
-        tags={"search", "scraping"},
-        exclude_args=["extractor"],
-    )
-    async def search_hashtags(
-        query: str,
-        ctx: Context,
-        max_results: int = 50,
-        extractor: Any | None = None,
-    ) -> dict[str, Any]:
-        """
-        Search for Instagram hashtags.
-
-        Args:
-            query: Search query (e.g., "travel", "photography"). The # prefix is optional.
-            ctx: FastMCP context for progress reporting
-            max_results: Maximum number of results to return (default 50)
-
-        Returns:
-            Dict with url, sections (name -> raw text), and optional references.
-            The LLM should parse the raw text to extract individual hashtags and their stats.
-        """
-        try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="search_hashtags"
-            )
-            logger.info(
-                "Searching hashtags: query='%s', max_results=%d", query, max_results
-            )
-
-            await ctx.report_progress(
-                progress=0, total=100, message="Starting hashtag search"
-            )
-
-            result = await extractor.search_hashtags(query, max_results=max_results)
-
-            # Rename section key from generic search_results to hashtags
-            if "sections" in result and "search_results" in result["sections"]:
-                result["sections"]["hashtags"] = result["sections"].pop(
-                    "search_results"
-                )
-            if "references" in result and "search_results" in result["references"]:
-                result["references"]["hashtags"] = result["references"].pop(
-                    "search_results"
-                )
-
-            await ctx.report_progress(progress=100, total=100, message="Complete")
-
-            return result
-
-        except AuthenticationError as e:
-            try:
-                await handle_auth_error(e, ctx)
-            except Exception as relogin_exc:
-                raise_tool_error(relogin_exc, "search_hashtags")
-        except Exception as e:
-            raise_tool_error(e, "search_hashtags")  # NoReturn
+            logger.error("search_users failed: %s", e, exc_info=True)
+            return {
+                "url": f"https://www.instagram.com/explore/search/people/?q={query}",
+                "sections": {},
+                "section_errors": {
+                    "users": {
+                        "error_type": "search_failed",
+                        "error_message": (
+                            f"User search failed: {e}. Instagram's search requires "
+                            f"interactive login. Try searching directly on instagram.com."
+                        ),
+                    }
+                },
+                "warnings": [
+                    "Instagram search uses client-side rendering and may require "
+                    "an active browser session with valid authentication."
+                ],
+            }
 
     @mcp.tool(
         timeout=TOOL_TIMEOUT_SECONDS,
         title="Search Locations",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"search", "scraping"},
-        exclude_args=["extractor"],
     )
     async def search_locations(
         query: str,
@@ -199,4 +153,21 @@ def register_search_tools(mcp: FastMCP) -> None:
             except Exception as relogin_exc:
                 raise_tool_error(relogin_exc, "search_locations")
         except Exception as e:
-            raise_tool_error(e, "search_locations")  # NoReturn
+            logger.error("search_locations failed: %s", e, exc_info=True)
+            return {
+                "url": f"https://www.instagram.com/explore/search/location/?q={query}",
+                "sections": {},
+                "section_errors": {
+                    "locations": {
+                        "error_type": "search_failed",
+                        "error_message": (
+                            f"Location search failed: {e}. Instagram's search requires "
+                            f"interactive login. Try searching directly on instagram.com."
+                        ),
+                    }
+                },
+                "warnings": [
+                    "Instagram search uses client-side rendering and may require "
+                    "an active browser session with valid authentication."
+                ],
+            }

@@ -7,7 +7,6 @@ your current Instagram session separate.
 """
 
 import logging
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -15,9 +14,9 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 BRAVE_PATHS_UNIX = [
-    "/opt/brave-bin/brave",
-    "/usr/bin/brave-browser",
-    "/usr/bin/brave",
+    Path("/opt/brave-bin/brave"),
+    Path("/usr/bin/brave-browser"),
+    Path("/usr/bin/brave"),
     Path.home() / ".local/bin/brave",
 ]
 
@@ -124,8 +123,8 @@ def launch_brave() -> int:
         print(
             f"✓ Brave is already running with remote debugging (PID: {existing_debug})"
         )
-        print(f"\nNow run the MCP server:")
-        print(f"  uv run -m instagram_mcp_server")
+        print("\nNow run the MCP server:")
+        print("  uv run -m instagram_mcp_server")
         return 0
 
     # Check if Brave is running without debugging
@@ -170,8 +169,8 @@ def launch_brave() -> int:
             start_new_session=True,
         )
         print("\n✓ Brave launched successfully with your default profile!")
-        print(f"\nNow run the MCP server:")
-        print(f"  uv run -m instagram_mcp_server")
+        print("\nNow run the MCP server:")
+        print("  uv run -m instagram_mcp_server")
         return 0
 
     except Exception as e:

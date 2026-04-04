@@ -279,14 +279,22 @@ class TestUserTools:
         assert isinstance(call_kwargs["callbacks"], MCPContextProgressCallback)
 
 
+def _mock_insights_extractor(text, url="https://www.instagram.com/accounts/insights/"):
+    mock_extractor = MagicMock()
+    mock_extractor._navigate_to_page = AsyncMock()
+    mock_extractor._page = MagicMock()
+    mock_extractor._page.url = url
+    mock_extractor._page.goto = AsyncMock()
+    mock_extractor._page.wait_for_function = AsyncMock()
+    mock_extractor.extract_current_page = AsyncMock(
+        return_value=ExtractedSection(text=text, references=[])
+    )
+    return mock_extractor
+
+
 class TestInsightsTools:
     async def test_get_business_insights(self, mock_context):
-        mock_extractor = MagicMock()
-        mock_extractor.extract_page = AsyncMock(
-            return_value=ExtractedSection(
-                text="Reach: 10K\nImpressions: 50K", references=[]
-            )
-        )
+        mock_extractor = _mock_insights_extractor("Reach: 10K\nImpressions: 50K")
 
         from instagram_mcp_server.tools.insights import register_insights_tools
 
@@ -299,10 +307,7 @@ class TestInsightsTools:
         assert "pages_visited" not in result
 
     async def test_get_business_insights_omits_rate_limited(self, mock_context):
-        mock_extractor = MagicMock()
-        mock_extractor.extract_page = AsyncMock(
-            return_value=ExtractedSection(text=_RATE_LIMITED_MSG, references=[])
-        )
+        mock_extractor = _mock_insights_extractor(_RATE_LIMITED_MSG)
 
         from instagram_mcp_server.tools.insights import register_insights_tools
 
@@ -314,12 +319,7 @@ class TestInsightsTools:
         assert result["sections"] == {}
 
     async def test_get_audience_insights(self, mock_context):
-        mock_extractor = MagicMock()
-        mock_extractor.extract_page = AsyncMock(
-            return_value=ExtractedSection(
-                text="Age: 25-34\nLocation: US", references=[]
-            )
-        )
+        mock_extractor = _mock_insights_extractor("Age: 25-34\nLocation: US")
 
         from instagram_mcp_server.tools.insights import register_insights_tools
 
@@ -332,12 +332,7 @@ class TestInsightsTools:
         assert "pages_visited" not in result
 
     async def test_get_content_insights(self, mock_context):
-        mock_extractor = MagicMock()
-        mock_extractor.extract_page = AsyncMock(
-            return_value=ExtractedSection(
-                text="Top posts: Photo 1, Reel 1", references=[]
-            )
-        )
+        mock_extractor = _mock_insights_extractor("Top posts: Photo 1, Reel 1")
 
         from instagram_mcp_server.tools.insights import register_insights_tools
 
@@ -349,11 +344,8 @@ class TestInsightsTools:
         assert "content" in result["sections"]
 
     async def test_get_activity_insights(self, mock_context):
-        mock_extractor = MagicMock()
-        mock_extractor.extract_page = AsyncMock(
-            return_value=ExtractedSection(
-                text="Profile visits: 500\nFollowers gained: 20", references=[]
-            )
+        mock_extractor = _mock_insights_extractor(
+            "Profile visits: 500\nFollowers gained: 20"
         )
 
         from instagram_mcp_server.tools.insights import register_insights_tools
@@ -369,11 +361,23 @@ class TestInsightsTools:
 class TestPostTools:
     async def test_get_post_details_success(self, mock_context):
         mock_extractor = MagicMock()
+        mock_extractor._navigate_to_page = AsyncMock()
         mock_extractor.extract_page = AsyncMock(
             return_value=ExtractedSection(
                 text="Beautiful sunset at the beach", references=[]
             )
         )
+        mock_extractor.extract_og_metadata = AsyncMock(return_value={})
+        mock_extractor.extract_video_url = AsyncMock(return_value=None)
+        mock_extractor.extract_thumbnail_url = AsyncMock(return_value=None)
+        mock_extractor.extract_engagement_from_meta = AsyncMock(
+            return_value={"views": None, "likes": None, "comments": None}
+        )
+        mock_extractor.extract_timestamp = AsyncMock(return_value=None)
+        mock_extractor.extract_audio_info = AsyncMock(
+            return_value={"audio_name": None, "audio_artist": None}
+        )
+        mock_extractor.extract_caption_from_page = AsyncMock(return_value=None)
 
         from instagram_mcp_server.tools.posts import register_post_tools
 
@@ -392,11 +396,23 @@ class TestPostTools:
 
     async def test_get_post_details_with_comments(self, mock_context):
         mock_extractor = MagicMock()
+        mock_extractor._navigate_to_page = AsyncMock()
         mock_extractor.extract_page = AsyncMock(
             return_value=ExtractedSection(
                 text="Post body\nComment 1\nComment 2", references=[]
             )
         )
+        mock_extractor.extract_og_metadata = AsyncMock(return_value={})
+        mock_extractor.extract_video_url = AsyncMock(return_value=None)
+        mock_extractor.extract_thumbnail_url = AsyncMock(return_value=None)
+        mock_extractor.extract_engagement_from_meta = AsyncMock(
+            return_value={"views": None, "likes": None, "comments": None}
+        )
+        mock_extractor.extract_timestamp = AsyncMock(return_value=None)
+        mock_extractor.extract_audio_info = AsyncMock(
+            return_value={"audio_name": None, "audio_artist": None}
+        )
+        mock_extractor.extract_caption_from_page = AsyncMock(return_value=None)
 
         from instagram_mcp_server.tools.posts import register_post_tools
 
@@ -413,31 +429,15 @@ class TestPostTools:
         assert "main" in result["sections"]
         assert "comments" in result["sections"]
 
-    async def test_get_hashtag_posts_success(self, mock_context):
-        mock_extractor = MagicMock()
-        mock_extractor.extract_page = AsyncMock(
-            return_value=ExtractedSection(
-                text="Hashtag post 1\nHashtag post 2", references=[]
-            )
-        )
-
-        from instagram_mcp_server.tools.posts import register_post_tools
-
-        mcp = FastMCP("test")
-        register_post_tools(mcp)
-
-        tool_fn = await get_tool_fn(mcp, "get_hashtag_posts")
-        result = await tool_fn("travel", mock_context, extractor=mock_extractor)
-        assert "main" in result["sections"]
-        assert "https://www.instagram.com/explore/tags/travel/" == result["url"]
-
     async def test_get_location_posts_success(self, mock_context):
         mock_extractor = MagicMock()
-        mock_extractor.extract_page = AsyncMock(
-            return_value=ExtractedSection(
-                text="Location post 1\nLocation post 2", references=[]
-            )
+        mock_extractor._navigate_to_page = AsyncMock()
+        mock_extractor._extract_root_content = AsyncMock(
+            return_value={"text": "Location post 1\nLocation post 2", "references": []}
         )
+        mock_extractor._extract_post_links = AsyncMock(return_value=[])
+        mock_extractor._page = MagicMock()
+        mock_extractor._page.evaluate = AsyncMock(return_value=0)
 
         from instagram_mcp_server.tools.posts import register_post_tools
 
@@ -468,24 +468,6 @@ class TestSearchTools:
         # search_users renames search_results -> users
         assert "users" in result["sections"]
         mock_extractor.search_users.assert_awaited_once()
-
-    async def test_search_hashtags_success(self, mock_context):
-        expected = {
-            "url": "https://www.instagram.com/explore/search/?keywords=travel",
-            "sections": {"search_results": "#travel\n#travelphotography"},
-        }
-        mock_extractor = _make_mock_extractor(expected)
-
-        from instagram_mcp_server.tools.search import register_search_tools
-
-        mcp = FastMCP("test")
-        register_search_tools(mcp)
-
-        tool_fn = await get_tool_fn(mcp, "search_hashtags")
-        result = await tool_fn("travel", mock_context, extractor=mock_extractor)
-        # search_hashtags renames search_results -> hashtags
-        assert "hashtags" in result["sections"]
-        mock_extractor.search_hashtags.assert_awaited_once()
 
     async def test_search_locations_success(self, mock_context):
         expected = {
@@ -903,11 +885,9 @@ class TestToolTimeouts:
             "get_activity_insights",
             # Post tools
             "get_post_details",
-            "get_hashtag_posts",
             "get_location_posts",
             # Search tools
             "search_users",
-            "search_hashtags",
             "search_locations",
             # Messaging tools
             "get_direct_inbox",

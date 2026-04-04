@@ -28,7 +28,6 @@ def register_user_tools(mcp: FastMCP) -> None:
         title="Get User Profile",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"user", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_user_profile(
         username: str,
@@ -87,7 +86,6 @@ def register_user_tools(mcp: FastMCP) -> None:
         title="Get User Posts",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"user", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_user_posts(
         username: str,
@@ -96,7 +94,7 @@ def register_user_tools(mcp: FastMCP) -> None:
         extractor: Any | None = None,
     ) -> dict[str, Any]:
         """
-        Get an Instagram user's posts with engagement metrics.
+        Get an Instagram user's posts with structured data.
 
         Args:
             username: Instagram username (e.g., "instagram", "natgeo")
@@ -104,8 +102,8 @@ def register_user_tools(mcp: FastMCP) -> None:
             max_posts: Maximum number of posts to retrieve (default 50)
 
         Returns:
-            Dict with url and posts list, where each post has:
-            caption, likes, comments, timestamp, media_url.
+            Dict with url, posts list, total_posts count, sections, and references.
+            Each post has: id, shortcode, url, thumbnail_url, media_type.
         """
         try:
             extractor = extractor or await get_ready_extractor(
@@ -138,7 +136,6 @@ def register_user_tools(mcp: FastMCP) -> None:
         title="Get User Reels",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"user", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_user_reels(
         username: str,
@@ -147,7 +144,10 @@ def register_user_tools(mcp: FastMCP) -> None:
         extractor: Any | None = None,
     ) -> dict[str, Any]:
         """
-        Get an Instagram user's reels with view counts.
+        Get an Instagram user's reels with structured data.
+
+        Returns reel IDs, URLs, thumbnails, and view counts from the grid page
+        without navigating to individual reels (avoids N+1 rate limiting).
 
         Args:
             username: Instagram username (e.g., "instagram", "natgeo")
@@ -155,8 +155,9 @@ def register_user_tools(mcp: FastMCP) -> None:
             max_reels: Maximum number of reels to retrieve (default 50)
 
         Returns:
-            Dict with url and reels list, where each reel has:
-            caption, views, likes, comments, video_url.
+            Dict with url, reels list, total_reels count, sections, and references.
+            Each reel has: id, shortcode, url, thumbnail_url, view_count_text, media_type.
+            Use `get_post_details` on individual reel URLs for full engagement data.
         """
         try:
             extractor = extractor or await get_ready_extractor(
@@ -189,7 +190,6 @@ def register_user_tools(mcp: FastMCP) -> None:
         title="Get User Stories",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"user", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_user_stories(
         username: str,
@@ -237,7 +237,6 @@ def register_user_tools(mcp: FastMCP) -> None:
         title="Get User Highlights",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"user", "scraping"},
-        exclude_args=["extractor"],
     )
     async def get_user_highlights(
         username: str,

@@ -51,9 +51,7 @@ async def test_import_cookies_imports_bridge_subset_only(tmp_path):
 
     assert imported is True
     context.clear_cookies.assert_not_awaited()
-    context.add_cookies.assert_awaited_once_with(
-        [cookies[0], cookies[1]]
-    )
+    context.add_cookies.assert_awaited_once_with([cookies[0], cookies[1]])
 
 
 @pytest.mark.asyncio

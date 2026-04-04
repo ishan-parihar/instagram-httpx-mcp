@@ -120,7 +120,9 @@ class BrowserManager:
                     "--disable-gpu-sandbox",
                     "--disable-setuid-sandbox",
                     "--disable-sandbox",
-                    "--dns-prefetch-disable",
+                    # NOTE: --dns-prefetch-disable is intentionally omitted.
+                    # Combined with page.add_init_script() it triggers
+                    # net::ERR_NAME_NOT_RESOLVED before the first navigation.
                 ],
                 **self.launch_options,
                 "locale": "en-US",
@@ -144,9 +146,6 @@ class BrowserManager:
                 self._page = self._context.pages[0]
             else:
                 self._page = await self._context.new_page()
-
-            # Apply stealth measures to hide automation indicators
-            await self._apply_stealth_measures(self._page)
 
             logger.info("Browser context and page ready")
 
@@ -173,6 +172,17 @@ class BrowserManager:
             except Exception:
                 pass  # Ignore errors during stop
 
+    async def apply_stealth_after_navigation(self) -> None:
+        """Apply stealth measures after the first successful navigation.
+
+        Stealth scripts injected via page.add_init_script() before any
+        navigation cause DNS resolution failures in this environment.
+        Deferring until after the first page.goto() resolves this.
+        """
+        if self._page is None:
+            return
+        await self._apply_stealth_measures(self._page)
+
     async def _apply_stealth_measures(self, page: Page) -> None:
         """Apply stealth measures to hide automation indicators.
 
@@ -184,14 +194,12 @@ class BrowserManager:
         These measures help evade detection.
         """
         try:
-            # Remove navigator.webdriver flag
             await page.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
             """)
 
-            # Override permissions to appear more human
             await page.add_init_script("""
                 const originalQuery = window.navigator.permissions.query;
                 window.navigator.permissions.query = (parameters) => (
@@ -201,14 +209,12 @@ class BrowserManager:
                 );
             """)
 
-            # Mock plugins to appear like a real browser
             await page.add_init_script("""
                 Object.defineProperty(navigator, 'plugins', {
                     get: () => [1, 2, 3, 4, 5],
                 });
             """)
 
-            # Mock languages
             await page.add_init_script("""
                 Object.defineProperty(navigator, 'languages', {
                     get: () => ['en-US', 'en'],
@@ -386,6 +392,10 @@ class BrowserManager:
             if not all_cookies:
                 logger.debug("Cookie file is empty")
                 return False
+
+            # Support dict format: {"cookies": [...], "imported_from": "..."}
+            if isinstance(all_cookies, dict) and "cookies" in all_cookies:
+                all_cookies = all_cookies["cookies"]
 
             resolved_preset_name, cookie_names = self._cookie_preset_names(preset_name)
 

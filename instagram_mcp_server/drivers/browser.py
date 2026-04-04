@@ -6,18 +6,18 @@ context. Implements a singleton pattern for browser reuse across tool calls with
 automatic profile persistence.
 
 Supports two modes:
-1. CDP Mode (default): Connect to user's running Brave browser via CDP
-2. Legacy Mode: Launch automated browser with cookie import (deprecated)
+1. Isolated Mode (default): Import cookies from user's browser → launch separate Patchright browser
+2. CDP Mode (opt-in): Connect to user's running Brave browser via CDP
 """
 
 import logging
 import os
-import warnings
 from pathlib import Path
 
 from patchright.async_api import Browser as CDPBrowser
 
 from instagram_mcp_server.common_utils import secure_mkdir
+from instagram_mcp_server.cookie_import import load_or_import_cookies
 from instagram_mcp_server.core import (
     AuthenticationError,
     BrowserManager,
@@ -231,15 +231,23 @@ async def _authenticate_existing_profile(
     launch_options: dict[str, str],
     viewport: dict[str, int],
 ) -> BrowserManager:
+    cookie_path = portable_cookie_path(profile_dir)
     browser = _make_browser(
         profile_dir, launch_options=launch_options, viewport=viewport
     )
     try:
         await browser.start()
+        if cookie_path.exists():
+            await browser.import_cookies(cookie_path)
+            await stabilize_navigation("cookie import during auth", logger)
         if not await _feed_auth_succeeds(browser):
             raise AuthenticationError(
                 f"Stored runtime profile is invalid: {profile_dir}. Run with --login to refresh the source session."
             )
+        stealth = getattr(browser, "apply_stealth_after_navigation", None)
+        if stealth is not None and callable(stealth):
+            await stealth()
+        browser._page = await browser.context.new_page()
         browser.is_authenticated = True
         return browser
     except Exception:
@@ -291,8 +299,12 @@ async def _bridge_runtime_profile(
             raise AuthenticationError(
                 "No authentication found. Run with --login to create a profile."
             )
+        stealth = getattr(browser, "apply_stealth_after_navigation", None)
+        if stealth is not None and callable(stealth):
+            await stealth()
         await stabilize_navigation("post-import feed validation", logger)
         await record_page_trace(browser.page, "bridge-after-feed-validation")
+        browser._page = await browser.context.new_page()
         if not persist_runtime:
             logger.info(
                 "Foreign runtime %s authenticated via fresh bridge "
@@ -338,6 +350,7 @@ async def _bridge_runtime_profile(
                 )
             await stabilize_navigation("post-reopen feed validation", logger)
             await record_page_trace(reopened.page, "bridge-after-reopen-validation")
+            reopened._page = await reopened.context.new_page()
             write_runtime_state(
                 runtime_id,
                 source_state,
@@ -384,7 +397,7 @@ async def get_or_create_browser(
     if headless is not None:
         _headless = headless
 
-    # CDP MODE: Connect to existing Brave browser (DEFAULT)
+    # CDP MODE: Connect to existing Brave browser (opt-in via --cdp)
     if _cdp_mode_enabled():
         if _cdp_browser is not None:
             logger.debug("Reusing existing CDP browser connection")
@@ -418,14 +431,7 @@ async def get_or_create_browser(
         logger.info("Successfully connected to authenticated Brave session")
         return _wrap_cdp_browser(_cdp_browser)
 
-    # LEGACY MODE: Existing browser automation flow (DEPRECATED)
-    warnings.warn(
-        "Legacy browser automation mode is deprecated and will be removed in v2.0. "
-        "Please use CDP mode (connect to running Brave browser) instead. "
-        "See docs/CDP_MODE.md for migration instructions.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
+    # ISOLATED MODE: Cookie import → separate Patchright browser (DEFAULT)
 
     if _browser is not None:
         return _browser
@@ -433,12 +439,27 @@ async def get_or_create_browser(
     launch_options, viewport = _launch_options()
     source_profile_dir = get_profile_dir()
     cookie_path = portable_cookie_path(source_profile_dir)
+
+    # Auto-extract cookies from installed browsers if not already present.
+    # load_or_import_cookies() checks existing cookies.json first, then
+    # detects installed browsers, extracts cookies, validates, and saves.
+    cookies = load_or_import_cookies(source_profile_dir)
+    if cookies is None:
+        raise AuthenticationError(
+            "No Instagram authentication found. "
+            "Please log into Instagram in your web browser first, "
+            "then retry. Supported browsers: Brave, Chrome, Edge, Firefox, "
+            "Opera, Vivaldi, Arc, and others."
+        )
+
+    # Ensure source state exists after successful cookie extraction.
     source_state = load_source_state(source_profile_dir)
-    if (
-        not source_state
-        or not profile_exists(source_profile_dir)
-        or not cookie_path.exists()
-    ):
+    if not source_state:
+        from instagram_mcp_server.session_state import write_source_state
+
+        source_state = write_source_state(source_profile_dir)
+
+    if not profile_exists(source_profile_dir) or not cookie_path.exists():
         raise AuthenticationError(
             "No source authentication found. Run with --login to create a profile."
         )

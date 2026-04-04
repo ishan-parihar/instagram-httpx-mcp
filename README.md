@@ -1,164 +1,26 @@
 # Instagram MCP Server
 
 <p align="left">
-  <a href="https://pypi.org/project/instagram-scraper-mcp/" target="_blank"><img src="https://img.shields.io/pypi/v/instagram-scraper-mcp?color=blue" alt="PyPI"></a>
+  <a href="https://pypi.org/project/instagram-scraper-mcp/" target="_blank"><img src="https://img.shields.io/pypi/v/instagram-scraper-mcp?color=blue" alt="PyPI Version"></a>
   <a href="https://github.com/stickerdaniel/instagram-mcp-server/actions/workflows/ci.yml" target="_blank"><img src="https://github.com/stickerdaniel/instagram-mcp-server/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status"></a>
   <a href="https://github.com/stickerdaniel/instagram-mcp-server/actions/workflows/release.yml" target="_blank"><img src="https://github.com/stickerdaniel/instagram-mcp-server/actions/workflows/release.yml/badge.svg?branch=main" alt="Release"></a>
   <a href="https://github.com/stickerdaniel/instagram-mcp-server/blob/main/LICENSE" target="_blank"><img src="https://img.shields.io/badge/License-Apache%202.0-%233fb950?labelColor=32383f" alt="License"></a>
+  <img src="https://img.shields.io/badge/Python-3.12+-blue" alt="Python Version">
 </p>
 
-Through this Instagram MCP server, AI assistants like Claude can connect to your Instagram. Access profiles and posts, search for users, hashtags, and locations, or manage Business/Creator insights and direct messages.
+Model Context Protocol server that lets AI assistants (Claude, Cursor, Windsurf, etc.) interact with Instagram. Access profiles, posts, reels, Business/Creator insights, direct messages, and account actions with zero UX interference.
 
-## Installation Methods
+## Quick Start
 
-[![uvx](https://img.shields.io/badge/uvx-Quick_Install-de5fe9?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDEiIGhlaWdodD0iNDEiIHZpZXdCb3g9IjAgMCA0MSA0MSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTS01LjI4NjE5ZS0wNiAwLjE2ODYyOUwwLjA4NDMwOTggMjAuMTY4NUwwLjE1MTc2MiAzNi4xNjgzQzAuMTYxMDc1IDM4LjM3NzQgMS45NTk0NyA0MC4xNjA3IDQuMTY4NTkgNDAuMTUxNEwyMC4xNjg0IDQwLjA4NEwzMC4xNjg0IDQwLjA0MThMMzEuMTg1MiA0MC4wMzc1QzMzLjM4NzcgNDAuMDI4MiAzNS4xNjgzIDM4LjIwMjYgMzUuMTY4MyAzNlYzNkwzNy4wMDAzIDM2TDM3LjAwMDMgMzkuOTk5Mkw0MC4xNjgzIDM5Ljk5OTZMMzkuOTk5NiAtOS45NDY1M2UtMDdMMjEuNTk5OCAwLjA3NzU2ODlMMjEuNjc3NCAxNi4wMTg1TDIxLjY3NzQgMjUuOTk5OEwyMC4wNzc0IDI1Ljk5OThMMTguMzk5OCAyNS45OTk4TDE4LjQ3NzQgMTYuMDMyTDE4LjM5OTggMC4wOTEwNTkzTC01LjI4NjE5ZS0wNiAwLjE2ODYyOVoiIGZpbGw9IiNERTVGRTkiLz4KPC9zdmc+Cg==)](#-uvx-setup-recommended---universal)
-[![Install MCP Bundle](https://img.shields.io/badge/Claude_Desktop_MCPB-d97757?style=for-the-badge&logo=anthropic)](#-claude-desktop-mcp-bundle-formerly-dxt)
-[![Docker](https://img.shields.io/badge/Docker-Universal_MCP-008fe2?style=for-the-badge&logo=docker&logoColor=008fe2)](#-docker-setup)
-[![Development](https://img.shields.io/badge/Development-Local-ffdc53?style=for-the-badge&logo=python&logoColor=ffdc53)](#-local-setup-develop--contribute)
-
-## 🎯 CDP Mode (Recommended - No Bot Detection)
-
-**CDP (Chrome DevTools Protocol) mode** connects directly to your running Brave browser, eliminating Instagram's bot detection by using your real browser fingerprint and existing session.
-
-### Quick Start
-
-**First time setup:**
-
-```bash
-# 1. Close all Brave windows, then launch with remote debugging
-pkill brave && sleep 2 && uv run instagram-launch-brave
-
-# 2. Log into Instagram in the Brave window (if not already logged in)
-
-# 3. Run the MCP server (automatically connects to Brave)
-uv run -m instagram_mcp_server
-```
-
-**Subsequent runs:**
-
-Once Brave is running with `--remote-debugging-port=9222`, just run:
-
-```bash
-uv run -m instagram_mcp_server
-```
-
-Your Instagram session persists across MCP server restarts.
-
-### Benefits
-
-- ✅ **No bot detection** - Uses your real browser fingerprint
-- ✅ **No captchas** - Reuses your existing logged-in session
-- ✅ **Fast startup** - No browser launch overhead (~0.1s vs ~5s)
-- ✅ **Persistent session** - Stay logged in across restarts
-
-### How It Works
-
-The MCP server connects to your Brave browser via CDP on port 9222, using your existing Instagram session. No automated browser is launched.
-
-For detailed setup and troubleshooting, see [docs/CDP_MODE.md](docs/CDP_MODE.md).
-
-### Disable CDP Mode
-
-To use legacy browser automation (deprecated):
-
-```bash
-# Option 1: Using CLI flag
-uv run -m instagram_mcp_server --no-cdp
-
-# Option 2: Using environment variable
-export INSTAGRAM_USE_CDP_MODE=0
-uv run -m instagram_mcp_server
-```
-
----
-
-## Usage Examples
-
-```
-Research the background of this creator https://www.instagram.com/natgeo/
-```
-
-```
-Get this business profile for partnership discussions https://www.instagram.com/airbnb/
-```
-
-```
-What has Anthropic been posting about recently? https://www.instagram.com/anthropic_ai/
-```
-
-```
-Search for trending hashtags related to #travel
-```
-
-## Features & Tool Status
-
-| Tool | Description | Status | Avg Time |
-|------|-------------|--------|----------|
-| **Profile & Content** | | | |
-| `get_user_profile` | Get profile info with sections (posts, reels, stories, highlights) | ✅ Working | 7.8s |
-| `get_user_posts` | Get recent posts from user's feed | ⚠️ Links only | 6.1s |
-| `get_user_reels` | Get reels from user's profile | ✅ Working | 5.6s |
-| `get_user_stories` | Get current stories from user | ✅ Working | 6.5s |
-| `get_user_highlights` | Get story highlights | ✅ Working | 4.9s |
-| **Business/Creator Insights** | | | |
-| `get_business_insights` | Get reach, impressions, engagement metrics | ✅ Working¹ | 5.4s |
-| `get_audience_insights` | Get audience demographics | ✅ Working¹ | 5-8s |
-| `get_content_insights` | Get content performance data | ✅ Working¹ | 5-8s |
-| `get_activity_insights` | Get profile activity metrics | ✅ Working¹ | 5-8s |
-| **Search & Discovery** | | | |
-| `search_users` | Search for users by keywords | ⚠️ Limited² | 44s |
-| `search_hashtags` | Search for hashtags | ⚠️ Limited² | 40-50s |
-| `search_locations` | Search for locations | ⚠️ Limited² | 40-50s |
-| `get_post_details` | Get detailed post/reel information | ✅ Working | 15.8s |
-| `get_hashtag_posts` | Get posts for a hashtag | ⚠️ Links only | 6-10s |
-| `get_location_posts` | Get posts tagged at location | ✅ Working | 6-10s |
-| **Messaging & Actions** | | | |
-| `get_direct_inbox` | List DM conversations | ✅ Working | 8.1s |
-| `get_dm_conversation` | Read specific DM conversation | ✅ Working | 5-8s |
-| `send_dm` | Send direct message | ✅ Working | 3-5s |
-| `follow_user` | Follow a user | ✅ Working | 2.0s |
-| `unfollow_user` | Unfollow a user | ✅ Working | 2-3s |
-| `like_post` | Like a post/reel | ✅ Working | 3-5s |
-| `unlike_post` | Unlike a post/reel | ✅ Working | 3-5s |
-| `save_post` | Save a post/reel | ✅ Working | 3-5s |
-| `comment_on_post` | Comment on a post/reel | ✅ Working | 3-5s |
-| **Transcription** | | | |
-| `transcribe_user_reels` | Download & transcribe reels to SRT subtitles | ✅ Working³ | 30-60s/reel |
-| `transcribe_reel` | Transcribe single reel by URL | ✅ Working³ | 30-60s |
-| **AI Analysis (Gemini)** | | | |
-| `analyze_reel_with_gemini` | AI-powered reel analysis (summary/topics/quotes) | ✅ Working⁴ | 15-25s |
-| `bulk_analyze_reels_with_gemini` | Analyze multiple reels with AI | ✅ Working⁴ | 20-30s/reel |
-
-> ¹ Requires Business or Creator account  
-> ² Instagram blocks direct URL access to search pages - use Instagram web interface instead  
-> ³ Requires `caption` command (Whisper transcription) - see docs/TRANSCRIPTION.md  
-> ⁴ Uses Google Gemini 2.0 Flash - API key required (see docs/GEMINI_ANALYSIS.md)  
->
-> **Performance:** Average tool execution is **10.6s** (60-70% faster than v1.0.9) after timeout optimizations.  
-> **Gemini Analysis:** 3x faster than local transcription (~15-25s vs ~50s per reel)
-
-> [!NOTE]
-> **Tool Limitations:** Some tools have limitations due to Instagram's anti-scraping measures. See [Known Limitations](docs/KNOWN_LIMITATIONS.md) for details on search tools, post extraction, and rate limiting.
-
-> [!IMPORTANT]
-> **New: CDP Mode (Recommended)** - Connect directly to your running Brave browser to eliminate bot detection. See [CDP Mode Setup](#-cdp-mode-recommended---no-bot-detection) below. 04/2026
->
-> **Breaking change:** Instagram has made changes to prevent scraping. The newest version uses [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python) with persistent browser profiles instead of Playwright with session files. Old `session.json` files and `INSTAGRAM_COOKIE` env vars are no longer supported. Run `--login` again to create a new profile + cookie file that can be mounted in docker. 02/2026
-
-<br/>
-<br/>
-
-## 🚀 Quick Start (5 minutes)
-
-### 1. Install uv
+**1. Install**
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. Configure MCP Client
+**2. Configure your MCP client**
 
-**Claude Desktop** (`claude_desktop_config.json`):
+Add to your client's MCP config (see [full configs below](#mcp-client-configuration)):
 
 ```json
 {
@@ -171,7 +33,75 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 }
 ```
 
-**Other MCP Clients:**
+**3. First tool call**
+
+Restart your MCP client. On the first Instagram tool call, a login window opens if no session exists. Log in once, and cookies persist across restarts.
+
+## How It Works
+
+The server extracts your Instagram session cookies from your running browser (Chrome, Firefox, Edge, Brave, and 10+ others), saves them to `~/.instagram-mcp/profile/`, and launches an **isolated Patchright Chromium instance** with those cookies injected. All scraping happens in this separate browser. Your primary browser is never touched.
+
+```
+Your browser (logged into Instagram)
+  → cookies detected from SQLite cookie store
+  → saved to ~/.instagram-mcp/profile/
+  → injected into isolated Patchright Chromium
+  → all scraping runs in isolated instance
+```
+
+## Authentication
+
+| Scenario | What happens |
+|----------|-------------|
+| **First run** | Login browser window opens. Complete sign-in (including 2FA if needed). |
+| **Subsequent runs** | Cookies loaded from `~/.instagram-mcp/profile/` automatically. |
+| **Session expired** | Re-run `uvx instagram-scraper-mcp --login` to re-authenticate. |
+| **Clear session** | Run `uvx instagram-scraper-mcp --logout` to remove stored cookies. |
+
+> Instagram may request a login confirmation on your mobile app for new sessions. If you encounter a captcha, use `--login` to solve it manually in the opened browser.
+
+## MCP Client Configuration
+
+### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "instagram": {
+      "command": "uvx",
+      "args": ["instagram-scraper-mcp"]
+    }
+  }
+}
+```
+
+### Cursor
+
+```json
+{
+  "mcpServers": {
+    "instagram": {
+      "command": "uvx",
+      "args": ["instagram-scraper-mcp"]
+    }
+  }
+}
+```
+
+### Windsurf
+
+```json
+{
+  "mcpServers": {
+    "instagram": {
+      "command": "uvx",
+      "args": ["instagram-scraper-mcp"]
+    }
+  }
+}
+```
+
+### Generic MCP Client
 
 ```json
 {
@@ -184,177 +114,116 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 }
 ```
 
-### 3. First-Time Login (CDP Mode)
+## Tools
+
+### Profile & Content (6 tools)
+
+| Tool | Description |
+|------|-------------|
+| `get_user_profile` | Get profile info. Optional sections: posts, reels, stories, highlights, followers, following |
+| `get_user_posts` | Get structured post data (ID, shortcode, URL, thumbnail, media type) |
+| `get_user_reels` | Get reels with IDs, URLs, thumbnails, and view counts |
+| `get_user_stories` | Get active stories with media URLs and expiry timestamps |
+| `get_user_highlights` | Get story highlights with titles, cover URLs, and highlight IDs |
+| `get_post_details` | Get detailed post/reel info including caption, engagement, audio info, and optional comments |
+
+### Search & Discovery (5 tools)
+
+| Tool | Description |
+|------|-------------|
+| `search_users` | Search for users by name or keywords |
+| `search_hashtags` | Search for hashtags by keywords |
+| `search_locations` | Search for Instagram locations |
+| `get_hashtag_posts` | Get posts for a given hashtag |
+| `get_location_posts` | Get posts tagged at a specific location |
+
+### Messaging & Actions (9 tools)
+
+| Tool | Description |
+|------|-------------|
+| `get_direct_inbox` | List recent DM conversations |
+| `get_dm_conversation` | Read a specific DM conversation |
+| `send_dm` | Send a direct message to a user |
+| `follow_user` | Follow a user (sends follow request for private accounts) |
+| `unfollow_user` | Unfollow a user |
+| `like_post` | Like a post or reel |
+| `unlike_post` | Unlike a post or reel |
+| `save_post` | Save a post or reel to a collection |
+| `comment_on_post` | Post a comment on a post or reel |
+
+### Business/Creator Insights (4 tools)
+
+> All require a Business or Creator account (accessed via Professional Dashboard).
+
+| Tool | Description |
+|------|-------------|
+| `get_business_insights` | Get reach, impressions, and engagement metrics |
+| `get_audience_insights` | Get audience demographics |
+| `get_content_insights` | Get content performance data |
+| `get_activity_insights` | Get profile activity metrics |
+
+### Transcription (2 tools)
+
+> Requires the `caption` CLI tool (Whisper-based). See [docs/TRANSCRIPTION.md](docs/TRANSCRIPTION.md).
+
+| Tool | Description |
+|------|-------------|
+| `transcribe_user_reels` | Download and transcribe multiple reels to SRT subtitles |
+| `transcribe_reel` | Transcribe a single reel by URL to SRT |
+
+### AI Analysis (2 tools)
+
+> Requires `GEMINI_API_KEY` environment variable. Uses Google Gemini 2.0 Flash. See [docs/GEMINI_ANALYSIS.md](docs/GEMINI_ANALYSIS.md).
+
+| Tool | Description |
+|------|-------------|
+| `analyze_reel_with_gemini` | Multimodal reel analysis (summary, transcript, topics, quotes) |
+| `bulk_analyze_reels_with_gemini` | Analyze multiple reels with Gemini AI |
+
+## Optional Features
+
+### Gemini AI Analysis
+
+Set your API key before starting the server:
 
 ```bash
-# 1. Close all Brave windows
-pkill brave && sleep 2
-
-# 2. Launch Brave with remote debugging
-uv run instagram-launch-brave
-
-# 3. Log into Instagram in the Brave window
-
-# 4. Run MCP server (automatically connects)
-uv run -m instagram_mcp_server
+export GEMINI_API_KEY="your-api-key"
+uvx instagram-scraper-mcp
 ```
 
-**Done!** See [docs/MCP_SETUP.md](docs/MCP_SETUP.md) for full setup guide.
+### Local Transcription
 
-<br/>
-<br/>
+Install the [`caption`](https://github.com/oliverguhr/caption) CLI tool for local Whisper-based transcription. Alternatively, use `analyze_reel_with_gemini` for AI transcription without local dependencies.
 
-## 📋 MCP Configuration Reference
+### CDP Mode (Opt-in)
 
-<details>
-<summary><b>🔧 Configuration</b></summary>
-
-**Transport Modes:**
-
-- **Default (stdio)**: Standard communication for local MCP servers
-- **Streamable HTTP**: For web-based MCP server
-- If no transport is specified, the server defaults to `stdio`
-- An interactive terminal without explicit transport shows a chooser prompt
-
-**CLI Options:**
-
-- `--login` - Open browser to log in and save persistent profile
-- `--no-headless` - Show browser window (useful for debugging scraping issues)
-- `--log-level {DEBUG,INFO,WARNING,ERROR}` - Set logging level (default: WARNING)
-- `--transport {stdio,streamable-http}` - Optional: force transport mode (default: stdio)
-- `--host HOST` - HTTP server host (default: 127.0.0.1)
-- `--port PORT` - HTTP server port (default: 8000)
-- `--path PATH` - HTTP server path (default: /mcp)
-- `--logout` - Clear stored Instagram browser profile
-- `--timeout MS` - Browser timeout for page operations in milliseconds (default: 5000)
-- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.instagram-mcp/profile)
-- `--chrome-path PATH` - Path to Chrome/Chromium executable (for custom browser installations)
-
-**Basic Usage Examples:**
+Connect directly to a running Brave browser via Chrome DevTools Protocol instead of using cookie import:
 
 ```bash
-# Run with debug logging
-uvx instagram-scraper-mcp --log-level DEBUG
+# Start Brave with remote debugging
+brave --remote-debugging-port=9222
+
+# Connect via CLI flag
+uvx instagram-scraper-mcp --cdp
+
+# Or via environment variable
+export INSTAGRAM_USE_CDP_MODE=1
+uvx instagram-scraper-mcp
 ```
 
-**HTTP Mode Example (for web-based MCP clients):**
+See [docs/CDP_MODE.md](docs/CDP_MODE.md) for details.
 
-```bash
-uvx instagram-scraper-mcp --transport streamable-http --host 127.0.0.1 --port 8080 --path /mcp
-```
+## Docker Setup
 
-Runtime server logs are emitted by FastMCP/Uvicorn.
+Docker runs headless, so create a browser profile on your host first and mount it.
 
-Tool calls are serialized within a single server process to protect the shared
-Instagram browser session. Concurrent client requests queue instead of running in
-parallel. Use `--log-level DEBUG` to see scraper lock wait/acquire/release logs.
-
-**Test with mcp inspector:**
-
-1. Install and run mcp inspector ```bunx @modelcontextprotocol/inspector```
-2. Click pre-filled token url to open the inspector in your browser
-3. Select `Streamable HTTP` as `Transport Type`
-4. Set `URL` to `http://localhost:8080/mcp`
-5. Connect
-6. Test tools
-
-</details>
-
-<details>
-<summary><b>❗ Troubleshooting</b></summary>
-
-**Installation issues:**
-
-- Ensure you have uv installed: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Check uv version: `uv --version` (should be 0.4.0 or higher)
-
-**Session issues:**
-
-- **CDP Mode:** Ensure Brave is running with `--remote-debugging-port=9222`
-- **Legacy Mode:** Browser profile is stored at `~/.instagram-mcp/profile/`
-- Managed browser downloads are cached at `~/.instagram-mcp/patchright-browsers/`
-- Make sure you have only one active Instagram session at a time
-
-**Login issues:**
-
-- **CDP Mode:** Check Brave is running: `ps aux | grep brave | grep remote-debugging`
-- **CDP Mode:** See [docs/CDP_MODE.md](docs/CDP_MODE.md) for troubleshooting
-- Instagram may require a login confirmation in the Instagram mobile app for `--login`
-- You might get a captcha challenge if you logged in frequently. Run `uvx instagram-scraper-mcp --login` which opens a browser where you can solve it manually.
-
-**Timeout issues:**
-
-- If pages fail to load or elements aren't found, try increasing the timeout: `--timeout 10000`
-- Users on slow connections may need higher values (e.g., 15000-30000ms)
-- Can also set via environment variable: `TIMEOUT=10000`
-
-**Custom Chrome path:**
-
-- If Chrome is installed in a non-standard location, use `--chrome-path /path/to/chrome`
-- Can also set via environment variable: `CHROME_PATH=/path/to/chrome`
-
-</details>
-
-<br/>
-<br/>
-
-## 📦 Claude Desktop MCP Bundle (formerly DXT)
-
-**Prerequisites:** [Claude Desktop](https://claude.ai/download).
-
-**One-click installation** for Claude Desktop users:
-
-1. Download the latest `.mcpb` artifact from [releases](https://github.com/stickerdaniel/instagram-mcp-server/releases/latest)
-2. Click the downloaded `.mcpb` file to install it into Claude Desktop
-3. Call any Instagram tool
-
-On startup, the MCP Bundle starts preparing the shared Patchright Chromium browser cache in the background. If you call a tool too early, Claude will surface a setup-in-progress error. On the first tool call that needs authentication, the server opens an Instagram login browser window and asks you to retry after sign-in.
-
-### MCP Bundle Setup Help
-
-<details>
-<summary><b>❗ Troubleshooting</b></summary>
-
-**First-time setup behavior:**
-
-- Claude Desktop starts the bundle immediately; browser setup continues in the background
-- If the Patchright Chromium browser is still downloading, retry the tool after a short wait
-- Managed browser downloads are shared under `~/.instagram-mcp/patchright-browsers/`
-
-**Login issues:**
-
-- Make sure you have only one active Instagram session at a time
-- Instagram may require a login confirmation in the Instagram mobile app for `--login`
-- You might get a captcha challenge if you logged in frequently. Run `uvx instagram-scraper-mcp --login` which opens a browser where you can solve captchas manually. See the [uvx setup](#-uvx-setup-recommended---universal) for prerequisites.
-
-**Timeout issues:**
-
-- If pages fail to load or elements aren't found, try increasing the timeout: `--timeout 10000`
-- Users on slow connections may need higher values (e.g., 15000-30000ms)
-- Can also set via environment variable: `TIMEOUT=10000`
-
-</details>
-
-<br/>
-<br/>
-
-## 🐳 Docker Setup
-
-**Prerequisites:** Make sure you have [Docker](https://www.docker.com/get-started/) installed and running, and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed on the host for the one-time `--login` step.
-
-### Authentication
-
-Docker runs headless (no browser window), so you need to create a browser profile locally first and mount it into the container.
-
-**Step 1: Create profile on the host (one-time setup)**
+**1. Create profile (one-time)**
 
 ```bash
 uvx instagram-scraper-mcp --login
 ```
 
-This opens a browser window where you log in manually (5 minute timeout for 2FA, captcha, etc.). The browser profile and cookies are saved under `~/.instagram-mcp/`. On startup, Docker derives a Linux browser profile from your host cookies and creates a fresh session each time. If you experience stability issues with Docker, consider using the [uvx setup](#-uvx-setup-recommended---universal) instead.
-
-**Step 2: Configure Claude Desktop with Docker**
+**2. Configure MCP client**
 
 ```json
 {
@@ -363,7 +232,7 @@ This opens a browser window where you log in manually (5 minute timeout for 2FA,
       "command": "docker",
       "args": [
         "run", "--rm", "-i",
-        "-v", "~/.instagram-mcp:/home/pwuser/.instagram-mcp",
+        "-v", "${HOME}/.instagram-mcp:/home/pwuser/.instagram-mcp",
         "stickerdaniel/instagram-mcp-server:latest"
       ]
     }
@@ -371,221 +240,30 @@ This opens a browser window where you log in manually (5 minute timeout for 2FA,
 }
 ```
 
-> [!NOTE]
-> Docker creates a fresh session on each startup. Sessions may expire over time — run `uvx instagram-scraper-mcp --login` again if you encounter authentication issues.
+See [docs/docker-hub.md](docs/docker-hub.md) for full Docker documentation including HTTP mode and troubleshooting.
 
-> [!NOTE]
-> **Why can't I run `--login` in Docker?** Docker containers don't have a display server. Create a profile on your host using the [uvx setup](#-uvx-setup-recommended---universal) and mount it into Docker.
+## Troubleshooting
 
-### Docker Setup Help
+| Issue | Solution |
+|-------|----------|
+| **No cookies found** | Ensure you are logged into Instagram in a supported browser. Run `uvx instagram-scraper-mcp --login` to open the login flow. |
+| **Session expired** | Re-run `uvx instagram-scraper-mcp --login` to create a fresh session. |
+| **Captcha challenge** | Use `--login` to solve it manually in the opened browser. |
+| **Page timeout** | Increase timeout: `--timeout 10000` (or higher for slow connections). |
+| **Chrome not found** | Set custom path: `--chrome-path /path/to/chrome` or `CHROME_PATH` env var. |
+| **Multiple Instagram sessions** | Instagram may conflict with concurrent sessions. Log out of other active sessions. |
+| **Browser profile location** | Profile stored at `~/.instagram-mcp/profile/`. Use `--logout` to clear. |
 
-<details>
-<summary><b>🔧 Configuration</b></summary>
+For debug output, add `--log-level DEBUG`. Use `--no-headless` to watch browser actions.
 
-**Transport Modes:**
+## Development & Contributing
 
-- **Default (stdio)**: Standard communication for local MCP servers
-- **Streamable HTTP**: For a web-based MCP server
-- If no transport is specified, the server defaults to `stdio`
-- An interactive terminal without explicit transport shows a chooser prompt
+See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture guidelines, development commands, and the contribution workflow. Please [open an issue](https://github.com/stickerdaniel/instagram-mcp-server/issues) before submitting a PR.
 
-**CLI Options:**
+## License & Acknowledgements
 
-- `--log-level {DEBUG,INFO,WARNING,ERROR}` - Set logging level (default: WARNING)
-- `--transport {stdio,streamable-http}` - Optional: force transport mode (default: stdio)
-- `--host HOST` - HTTP server host (default: 127.0.0.1)
-- `--port PORT` - HTTP server port (default: 8000)
-- `--path PATH` - HTTP server path (default: /mcp)
-- `--logout` - Clear all stored Instagram auth state, including source and derived runtime profiles
-- `--timeout MS` - Browser timeout for page operations in milliseconds (default: 5000)
-- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.instagram-mcp/profile)
-- `--chrome-path PATH` - Path to Chrome/Chromium executable (rarely needed in Docker)
-
-> [!NOTE]
-> `--login` and `--no-headless` are not available in Docker (no display server). Use the [uvx setup](#-uvx-setup-recommended---universal) to create profiles.
-
-**HTTP Mode Example (for web-based MCP clients):**
-
-```bash
-docker run -it --rm \
-  -v ~/.instagram-mcp:/home/pwuser/.instagram-mcp \
-  -p 8080:8080 \
-  stickerdaniel/instagram-mcp-server:latest \
-  --transport streamable-http --host 0.0.0.0 --port 8080 --path /mcp
-```
-
-Runtime server logs are emitted by FastMCP/Uvicorn.
-
-**Test with mcp inspector:**
-
-1. Install and run mcp inspector ```bunx @modelcontextprotocol/inspector```
-2. Click pre-filled token url to open the inspector in your browser
-3. Select `Streamable HTTP` as `Transport Type`
-4. Set `URL` to `http://localhost:8080/mcp`
-5. Connect
-6. Test tools
-
-</details>
-
-<details>
-<summary><b>❗ Troubleshooting</b></summary>
-
-**Docker issues:**
-
-- Make sure [Docker](https://www.docker.com/get-started/) is installed
-- Check if Docker is running: `docker ps`
-
-**Login issues:**
-
-- Make sure you have only one active Instagram session at a time
-- Instagram may require a login confirmation in the Instagram mobile app for `--login`
-- You might get a captcha challenge if you logged in frequently. Run `uvx instagram-scraper-mcp --login` which opens a browser where you can solve captchas manually. See the [uvx setup](#-uvx-setup-recommended---universal) for prerequisites.
-- If Docker auth becomes stale after you re-login on the host, restart Docker once so it can fresh-bridge from the new source session generation.
-
-**Timeout issues:**
-
-- If pages fail to load or elements aren't found, try increasing the timeout: `--timeout 10000`
-- Users on slow connections may need higher values (e.g., 15000-30000ms)
-- Can also set via environment variable: `TIMEOUT=10000`
-
-**Custom Chrome path:**
-
-- If Chrome is installed in a non-standard location, use `--chrome-path /path/to/chrome`
-- Can also set via environment variable: `CHROME_PATH=/path/to/chrome`
-
-</details>
-
-<br/>
-<br/>
-
-## 🐍 Local Setup (Develop & Contribute)
-
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture guidelines and checklists. Please [open an issue](https://github.com/stickerdaniel/instagram-mcp-server/issues) first to discuss the feature or bug fix before submitting a PR.
-
-**Prerequisites:** [Git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/) installed
-
-### Installation
-
-```bash
-# 1. Clone repository
-git clone https://github.com/stickerdaniel/instagram-mcp-server
-cd instagram-mcp-server
-
-# 2. Install UV package manager (if not already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 3. Install dependencies
-uv sync
-uv sync --group dev
-
-# 4. Install pre-commit hooks
-uv run pre-commit install
-
-# 5. Start the server
-uv run -m instagram_mcp_server
-```
-
-The local server uses the same managed-runtime flow as MCPB and `uvx`: it prepares the Patchright Chromium browser cache in the background and opens Instagram login on the first auth-requiring tool call. You can still run `uv run -m instagram_mcp_server --login` when you want to create the session explicitly.
-
-### Local Setup Help
-
-<details>
-<summary><b>🔧 Configuration</b></summary>
-
-**CLI Options:**
-
-- `--login` - Open browser to log in and save persistent profile
-- `--no-headless` - Show browser window (useful for debugging scraping issues)
-- `--log-level {DEBUG,INFO,WARNING,ERROR}` - Set logging level (default: WARNING)
-- `--transport {stdio,streamable-http}` - Optional: force transport mode (default: stdio)
-- `--host HOST` - HTTP server host (default: 127.0.0.1)
-- `--port PORT` - HTTP server port (default: 8000)
-- `--path PATH` - HTTP server path (default: /mcp)
-- `--logout` - Clear stored Instagram browser profile
-- `--timeout MS` - Browser timeout for page operations in milliseconds (default: 5000)
-- `--status` - Check if current session is valid and exit
-- `--user-data-dir PATH` - Path to persistent browser profile directory (default: ~/.instagram-mcp/profile)
-- `--slow-mo MS` - Delay between browser actions in milliseconds (default: 0, useful for debugging)
-- `--user-agent STRING` - Custom browser user agent
-- `--viewport WxH` - Browser viewport size (default: 1280x720)
-- `--chrome-path PATH` - Path to Chrome/Chromium executable (for custom browser installations)
-- `--help` - Show help
-
-> **Note:** Most CLI options have environment variable equivalents. See `.env.example` for details.
-
-**HTTP Mode Example (for web-based MCP clients):**
-
-```bash
-uv run -m instagram_mcp_server --transport streamable-http --host 127.0.0.1 --port 8000 --path /mcp
-```
-
-**Claude Desktop:**
-
-```json
-{
-  "mcpServers": {
-    "instagram": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/instagram-mcp-server", "run", "-m", "instagram_mcp_server"]
-    }
-  }
-}
-```
-
-`stdio` is used by default for this config.
-
-</details>
-
-<details>
-<summary><b>❗ Troubleshooting</b></summary>
-
-**Login issues:**
-
-- Make sure you have only one active Instagram session at a time
-- Instagram may require a login confirmation in the Instagram mobile app for `--login`
-- You might get a captcha challenge if you logged in frequently. The `--login` command opens a browser where you can solve it manually.
-
-**Scraping issues:**
-
-- Use `--no-headless` to see browser actions and debug scraping problems
-- Add `--log-level DEBUG` to see more detailed logging
-
-**Session issues:**
-
-- Browser profile is stored at `~/.instagram-mcp/profile/`
-- Use `--logout` to clear the profile and start fresh
-
-**Python/Patchright issues:**
-
-- Check Python version: `python --version` (should be 3.12+)
-- Reinstall Patchright: `uv run patchright install chromium`
-- Reinstall dependencies: `uv sync --reinstall`
-
-**Timeout issues:**
-
-- If pages fail to load or elements aren't found, try increasing the timeout: `--timeout 10000`
-- Users on slow connections may need higher values (e.g., 15000-30000ms)
-- Can also set via environment variable: `TIMEOUT=10000`
-
-**Custom Chrome path:**
-
-- If Chrome is installed in a non-standard location, use `--chrome-path /path/to/chrome`
-- Can also set via environment variable: `CHROME_PATH=/path/to/chrome`
-
-</details>
-
-
-<br/>
-<br/>
-
-## Acknowledgements
+Licensed under the [Apache 2.0 License](LICENSE).
 
 Built with [FastMCP](https://gofastmcp.com/) and [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python).
 
 Use in accordance with [Instagram's Terms of Use](https://help.instagram.com/581066165581870). Web scraping may violate Instagram's terms. This tool is for personal use only.
-
-## License
-
-This project is licensed under the Apache 2.0 license.
-
-<br>

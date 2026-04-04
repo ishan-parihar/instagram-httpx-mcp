@@ -10,7 +10,6 @@ ReferenceKind = Literal[
     "user",
     "post",
     "reel",
-    "hashtag",
     "location",
     "story",
     "live",
@@ -223,9 +222,6 @@ def classify_link(href: str) -> tuple[ReferenceKind, str] | None:
 
     if match := INSTAGRAM_POST_PATTERN.search(href):
         return "post", f"https://www.instagram.com/p/{match.group(1)}/"
-
-    if match := INSTAGRAM_HASHTAG_PATTERN.search(href):
-        return "hashtag", f"https://www.instagram.com/explore/tags/{match.group(1)}/"
 
     if match := INSTAGRAM_LOCATION_PATTERN.search(href):
         return (
