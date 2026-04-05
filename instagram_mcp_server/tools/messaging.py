@@ -8,6 +8,7 @@ import logging
 from typing import Annotated, Any
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 from pydantic import Field
 
 from instagram_mcp_server.callbacks import MCPContextProgressCallback
@@ -32,9 +33,8 @@ def register_messaging_tools(mcp: FastMCP) -> None:
         tags={"messaging", "scraping"},
     )
     async def get_direct_inbox(
-        ctx: Context,
         limit: Annotated[int, Field(ge=1, le=50)] = 20,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         List recent DM conversations from the Instagram direct inbox.
@@ -47,9 +47,7 @@ def register_messaging_tools(mcp: FastMCP) -> None:
             Dict with url, sections (inbox -> raw text), and optional references.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_direct_inbox"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_direct_inbox")
             logger.info("Fetching DM inbox (limit=%d)", limit)
 
             callback = MCPContextProgressCallback(ctx)
@@ -76,11 +74,10 @@ def register_messaging_tools(mcp: FastMCP) -> None:
         tags={"messaging", "scraping"},
     )
     async def get_dm_conversation(
-        ctx: Context,
         thread_id: str | None = None,
         username: str | None = None,
         limit: Annotated[int, Field(ge=1, le=100)] = 50,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Read a specific DM conversation.
@@ -105,9 +102,7 @@ def register_messaging_tools(mcp: FastMCP) -> None:
             )
 
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_dm_conversation"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_dm_conversation")
             logger.info(
                 "Fetching DM conversation: username=%s, thread_id=%s",
                 username,
@@ -144,8 +139,7 @@ def register_messaging_tools(mcp: FastMCP) -> None:
         username: str,
         message: str,
         confirm_send: bool,
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Send a direct message to an Instagram user.
@@ -170,7 +164,7 @@ def register_messaging_tools(mcp: FastMCP) -> None:
             }
 
         try:
-            extractor = extractor or await get_ready_extractor(ctx, tool_name="send_dm")
+            extractor = await get_ready_extractor(ctx, tool_name="send_dm")
             logger.info("Sending DM to %s (confirm_send=%s)", username, confirm_send)
 
             callback = MCPContextProgressCallback(ctx)

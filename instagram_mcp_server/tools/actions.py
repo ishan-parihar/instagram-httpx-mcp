@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 
 from instagram_mcp_server.constants import TOOL_TIMEOUT_SECONDS
 from instagram_mcp_server.core.exceptions import AuthenticationError
@@ -29,8 +30,7 @@ def register_action_tools(mcp: FastMCP) -> None:
     )
     async def follow_user(
         username: str,
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Follow a user or send a follow request for private accounts.
@@ -46,9 +46,7 @@ def register_action_tools(mcp: FastMCP) -> None:
             Dict with url, status, and optional message.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="follow_user"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="follow_user")
             logger.info("Following user: %s", username)
 
             result = await extractor.follow_user(
@@ -73,8 +71,7 @@ def register_action_tools(mcp: FastMCP) -> None:
     )
     async def unfollow_user(
         username: str,
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Unfollow a user.
@@ -89,9 +86,7 @@ def register_action_tools(mcp: FastMCP) -> None:
             Dict with url, status, and optional message.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="unfollow_user"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="unfollow_user")
             logger.info("Unfollowing user: %s", username)
 
             result = await extractor.unfollow_user(
@@ -116,8 +111,7 @@ def register_action_tools(mcp: FastMCP) -> None:
     )
     async def like_post(
         post_url: str,
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Like a post.
@@ -132,9 +126,7 @@ def register_action_tools(mcp: FastMCP) -> None:
             Dict with url, status, and optional message.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="like_post"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="like_post")
             logger.info("Liking post: %s", post_url)
 
             result = await extractor.like_post(post_url)
@@ -157,8 +149,7 @@ def register_action_tools(mcp: FastMCP) -> None:
     )
     async def unlike_post(
         post_url: str,
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Unlike a post.
@@ -173,9 +164,7 @@ def register_action_tools(mcp: FastMCP) -> None:
             Dict with url, status, and optional message.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="unlike_post"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="unlike_post")
             logger.info("Unliking post: %s", post_url)
 
             result = await extractor.unlike_post(post_url)
@@ -198,9 +187,8 @@ def register_action_tools(mcp: FastMCP) -> None:
     )
     async def save_post(
         post_url: str,
-        ctx: Context,
         collection: str | None = None,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Save a post to a collection.
@@ -217,9 +205,7 @@ def register_action_tools(mcp: FastMCP) -> None:
             Dict with url, status, and optional message.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="save_post"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="save_post")
             logger.info(
                 "Saving post: %s (collection=%s)",
                 post_url,
@@ -248,8 +234,7 @@ def register_action_tools(mcp: FastMCP) -> None:
         post_url: str,
         comment: str,
         confirm_post: bool,
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Post a comment on a post.
@@ -274,9 +259,7 @@ def register_action_tools(mcp: FastMCP) -> None:
             }
 
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="comment_on_post"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="comment_on_post")
             logger.info("Commenting on post: %s", post_url)
 
             result = await extractor.comment_on_post(post_url, comment)

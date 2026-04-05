@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 
 from instagram_mcp_server.constants import TOOL_TIMEOUT_SECONDS
 from instagram_mcp_server.core.exceptions import AuthenticationError
@@ -29,9 +30,8 @@ def register_post_tools(mcp: FastMCP) -> None:
     )
     async def get_post_details(
         post_url: str,
-        ctx: Context,
         include_comments: bool = False,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get detailed post/reel information with structured data.
@@ -61,9 +61,7 @@ def register_post_tools(mcp: FastMCP) -> None:
             }
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_post_details"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_post_details")
 
             logger.info(
                 "Scraping post: %s (include_comments=%s)",
@@ -194,9 +192,8 @@ def register_post_tools(mcp: FastMCP) -> None:
     )
     async def get_location_posts(
         location_id: str,
-        ctx: Context,
         max_posts: int = 50,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get posts tagged at a location.
@@ -214,9 +211,7 @@ def register_post_tools(mcp: FastMCP) -> None:
             and total_posts count.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_location_posts"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_location_posts")
 
             location_url = f"https://www.instagram.com/explore/locations/{location_id}/"
 
@@ -293,9 +288,8 @@ def register_post_tools(mcp: FastMCP) -> None:
     )
     async def get_hashtag_posts(
         hashtag: str,
-        ctx: Context,
         max_posts: int = 50,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get posts for a hashtag.
@@ -313,9 +307,7 @@ def register_post_tools(mcp: FastMCP) -> None:
             and total_posts count.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_hashtag_posts"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_hashtag_posts")
 
             hashtag_url = f"https://www.instagram.com/explore/tags/{hashtag}/"
 

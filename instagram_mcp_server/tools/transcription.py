@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 
 from instagram_mcp_server.dependencies import get_ready_extractor
 from instagram_mcp_server.error_handler import raise_tool_error
@@ -161,10 +162,9 @@ def register_transcription_tools(mcp: FastMCP) -> None:
     )
     async def transcribe_user_reels(
         username: str,
-        ctx: Context,
         max_reels: int = 10,
         keep_videos: bool = False,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Download and transcribe Instagram reels to SRT subtitles.
@@ -204,7 +204,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                     "output_dir": str(OUTPUT_DIR),
                 }
 
-            extractor = extractor or await get_ready_extractor(
+            extractor = await get_ready_extractor(
                 ctx, tool_name="transcribe_user_reels"
             )
 
@@ -329,9 +329,8 @@ def register_transcription_tools(mcp: FastMCP) -> None:
     )
     async def transcribe_reel(
         reel_url: str,
-        ctx: Context,
         keep_video: bool = False,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Transcribe a single Instagram reel to SRT.
@@ -368,9 +367,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                 progress=0, total=100, message="Getting reel details..."
             )
 
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="transcribe_reel"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="transcribe_reel")
 
             logger.info("Transcribing reel: %s", reel_id)
 

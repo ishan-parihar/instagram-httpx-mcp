@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 
 from instagram_mcp_server.constants import TOOL_TIMEOUT_SECONDS
 from instagram_mcp_server.core.exceptions import AuthenticationError
@@ -28,9 +29,8 @@ def register_search_tools(mcp: FastMCP) -> None:
     )
     async def search_users(
         query: str,
-        ctx: Context,
         max_results: int = 50,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Search for Instagram users.
@@ -45,9 +45,7 @@ def register_search_tools(mcp: FastMCP) -> None:
             The LLM should parse the raw text to extract individual users and their profiles.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="search_users"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="search_users")
             logger.info(
                 "Searching users: query='%s', max_results=%d", query, max_results
             )
@@ -103,9 +101,8 @@ def register_search_tools(mcp: FastMCP) -> None:
     )
     async def search_locations(
         query: str,
-        ctx: Context,
         max_results: int = 50,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Search for Instagram locations.
@@ -120,9 +117,7 @@ def register_search_tools(mcp: FastMCP) -> None:
             The LLM should parse the raw text to extract individual locations and their details.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="search_locations"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="search_locations")
             logger.info(
                 "Searching locations: query='%s', max_results=%d", query, max_results
             )

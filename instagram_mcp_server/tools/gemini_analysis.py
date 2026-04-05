@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 import httpx
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 from google import genai
 from google.genai import types
 
@@ -226,11 +227,10 @@ def register_gemini_tools(mcp: FastMCP) -> None:
     )
     async def analyze_reel_with_gemini(
         reel_url: str,
-        ctx: Context,
         analysis_type: Literal[
             "summary", "transcript", "topics", "quotes", "full"
         ] = "full",
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Analyze Instagram reel using Google Gemini 2.0 Flash.
@@ -261,7 +261,7 @@ def register_gemini_tools(mcp: FastMCP) -> None:
                 progress=0, total=100, message="Getting reel details..."
             )
 
-            extractor = extractor or await get_ready_extractor(
+            extractor = await get_ready_extractor(
                 ctx, tool_name="analyze_reel_with_gemini"
             )
 
@@ -346,12 +346,11 @@ def register_gemini_tools(mcp: FastMCP) -> None:
     )
     async def bulk_analyze_reels_with_gemini(
         username: str,
-        ctx: Context,
         max_reels: int = 5,
         analysis_type: Literal[
             "summary", "transcript", "topics", "quotes", "full"
         ] = "summary",
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Analyze multiple reels from a user with Gemini.
@@ -373,7 +372,7 @@ def register_gemini_tools(mcp: FastMCP) -> None:
                 progress=0, total=100, message="Fetching reels..."
             )
 
-            extractor = extractor or await get_ready_extractor(
+            extractor = await get_ready_extractor(
                 ctx, tool_name="bulk_analyze_reels_with_gemini"
             )
 

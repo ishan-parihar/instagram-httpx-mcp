@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 
 from instagram_mcp_server.callbacks import MCPContextProgressCallback
 from instagram_mcp_server.constants import TOOL_TIMEOUT_SECONDS
@@ -31,9 +32,8 @@ def register_user_tools(mcp: FastMCP) -> None:
     )
     async def get_user_profile(
         username: str,
-        ctx: Context,
         sections: str | None = None,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get an Instagram user's profile.
@@ -54,9 +54,7 @@ def register_user_tools(mcp: FastMCP) -> None:
             The LLM should parse the raw text in each section.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_user_profile"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_user_profile")
             requested, unknown = parse_user_sections(sections)
 
             logger.info(
@@ -89,9 +87,8 @@ def register_user_tools(mcp: FastMCP) -> None:
     )
     async def get_user_posts(
         username: str,
-        ctx: Context,
         max_posts: int = 50,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get an Instagram user's posts with structured data.
@@ -106,9 +103,7 @@ def register_user_tools(mcp: FastMCP) -> None:
             Each post has: id, shortcode, url, thumbnail_url, media_type.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_user_posts"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_user_posts")
 
             logger.info(
                 "Scraping user posts: %s (max_posts=%d)",
@@ -139,9 +134,8 @@ def register_user_tools(mcp: FastMCP) -> None:
     )
     async def get_user_reels(
         username: str,
-        ctx: Context,
         max_reels: int = 50,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get an Instagram user's reels with structured data.
@@ -160,9 +154,7 @@ def register_user_tools(mcp: FastMCP) -> None:
             Use `get_post_details` on individual reel URLs for full engagement data.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_user_reels"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_user_reels")
 
             logger.info(
                 "Scraping user reels: %s (max_reels=%d)",
@@ -193,8 +185,7 @@ def register_user_tools(mcp: FastMCP) -> None:
     )
     async def get_user_stories(
         username: str,
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get an Instagram user's active stories.
@@ -208,9 +199,7 @@ def register_user_tools(mcp: FastMCP) -> None:
             media_url, timestamp, expires_at.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_user_stories"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_user_stories")
 
             logger.info("Scraping user stories: %s", username)
 
@@ -240,8 +229,7 @@ def register_user_tools(mcp: FastMCP) -> None:
     )
     async def get_user_highlights(
         username: str,
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get an Instagram user's story highlights.
@@ -255,9 +243,7 @@ def register_user_tools(mcp: FastMCP) -> None:
             title, cover_url, highlight_id.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_user_highlights"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_user_highlights")
 
             logger.info("Scraping user highlights: %s", username)
 

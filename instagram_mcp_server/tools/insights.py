@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 
 from instagram_mcp_server.constants import TOOL_TIMEOUT_SECONDS
 from instagram_mcp_server.core.exceptions import AuthenticationError
@@ -130,9 +131,8 @@ def register_insights_tools(mcp: FastMCP) -> None:
         tags={"insights", "scraping"},
     )
     async def get_business_insights(
-        ctx: Context,
         time_range: str = "7d",
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get Business/Creator account insights from Professional Dashboard.
@@ -148,7 +148,7 @@ def register_insights_tools(mcp: FastMCP) -> None:
             The LLM should parse the raw text in each section.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
+            extractor = await get_ready_extractor(
                 ctx, tool_name="get_business_insights"
             )
             logger.info("Scraping business insights (time_range=%s)", time_range)
@@ -175,8 +175,7 @@ def register_insights_tools(mcp: FastMCP) -> None:
         tags={"insights", "scraping"},
     )
     async def get_audience_insights(
-        ctx: Context,
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get audience demographics from Professional Dashboard.
@@ -191,7 +190,7 @@ def register_insights_tools(mcp: FastMCP) -> None:
             The LLM should parse the raw text to extract audience demographics.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
+            extractor = await get_ready_extractor(
                 ctx, tool_name="get_audience_insights"
             )
             logger.info("Scraping audience insights")
@@ -218,9 +217,8 @@ def register_insights_tools(mcp: FastMCP) -> None:
         tags={"insights", "scraping"},
     )
     async def get_content_insights(
-        ctx: Context,
         time_range: str = "30d",
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get content performance insights from Professional Dashboard.
@@ -236,9 +234,7 @@ def register_insights_tools(mcp: FastMCP) -> None:
             The LLM should parse the raw text to extract content performance data.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
-                ctx, tool_name="get_content_insights"
-            )
+            extractor = await get_ready_extractor(ctx, tool_name="get_content_insights")
             logger.info("Scraping content insights (time_range=%s)", time_range)
             return await _extract_insight(
                 extractor,
@@ -263,9 +259,8 @@ def register_insights_tools(mcp: FastMCP) -> None:
         tags={"insights", "scraping"},
     )
     async def get_activity_insights(
-        ctx: Context,
         time_range: str = "7d",
-        extractor: Any | None = None,
+        ctx: Context = CurrentContext(),
     ) -> dict[str, Any]:
         """
         Get profile activity insights from Professional Dashboard.
@@ -281,7 +276,7 @@ def register_insights_tools(mcp: FastMCP) -> None:
             The LLM should parse the raw text to extract profile activity data.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
+            extractor = await get_ready_extractor(
                 ctx, tool_name="get_activity_insights"
             )
             logger.info("Scraping activity insights (time_range=%s)", time_range)
