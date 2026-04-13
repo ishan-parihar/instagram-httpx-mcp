@@ -1,11 +1,11 @@
 """
 Instagram Reel Transcription Tools.
 
-Downloads reels and generates SRT subtitles using existing caption command.
+Downloads reels and generates SRT subtitles using Apex Whisper model
+via the whisper-hindi conda environment.
 """
 
 import logging
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,10 @@ from fastmcp.dependencies import CurrentContext
 
 from instagram_mcp_server.dependencies import get_ready_extractor
 from instagram_mcp_server.error_handler import raise_tool_error
+from instagram_mcp_server.tools.apex_transcriber import (
+    _is_apex_healthy,
+    transcribe_video,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,73 +73,22 @@ async def download_video(video_url: str, output_path: Path, page=None) -> bool:
         return False
 
 
-def is_caption_available() -> bool:
-    """Check if the caption CLI is installed and accessible."""
-    try:
-        result = subprocess.run(
-            ["caption", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return (
-            result.returncode == 0
-            or "usage" in result.stderr.lower()
-            or "usage" in result.stdout.lower()
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-    except Exception:
-        return False
+def is_apex_available() -> bool:
+    return _is_apex_healthy()
 
 
-def run_caption(media_path: Path, output_dir: Path = None) -> Path | None:
-    """
-    Run caption command on media file.
-
-    Args:
-        media_path: Path to video/audio file
-        output_dir: Where to save SRT (default: same directory as media)
-
-    Returns:
-        Path to generated SRT file, or None if failed
-    """
+def run_apex_transcription(
+    media_path: Path, output_dir: Path | None = None
+) -> Path | None:
     if output_dir is None:
         output_dir = media_path.parent
-
-    try:
-        logger.info("Running caption on %s...", media_path.name)
-
-        result = subprocess.run(
-            ["caption", str(media_path)],
-            cwd=str(output_dir),
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-
-        if result.returncode != 0:
-            logger.error("caption failed: %s", result.stderr)
-            return None
-
-        srt_path = output_dir / f"{media_path.stem}.srt"
-
-        if srt_path.exists():
-            logger.info("Generated: %s", srt_path.name)
-            return srt_path
-        else:
-            logger.error("SRT not found: %s", srt_path)
-            return None
-
-    except subprocess.TimeoutExpired:
-        logger.error("caption timeout for %s", media_path.name)
-        return None
-    except FileNotFoundError:
-        logger.error("caption command not found. Make sure it's in PATH.")
-        return None
-    except Exception as e:
-        logger.error("caption error: %s", e)
-        return None
+    srt_path = output_dir / f"{media_path.stem}.srt"
+    logger.info("Running Apex transcription on %s...", media_path.name)
+    result = transcribe_video(str(media_path), str(srt_path))
+    if result and Path(result).exists():
+        logger.info("Generated: %s", srt_path.name)
+        return srt_path
+    return None
 
 
 def read_srt_preview(srt_path: Path, max_chars: int = 200) -> str:
@@ -189,15 +142,15 @@ def register_transcription_tools(mcp: FastMCP) -> None:
         try:
             ensure_directories()
 
-            # Check for caption CLI dependency upfront
-            if not is_caption_available():
+            # Check for Apex transcription dependency upfront
+            if not is_apex_available():
                 return {
                     "url": f"https://www.instagram.com/{username}/",
                     "transcripts": [],
                     "total_reels": 0,
                     "warnings": [
-                        "The 'caption' CLI tool is not installed. Transcription requires it. "
-                        "Install with: pip install caption (or see https://github.com/ufal/whisper). "
+                        "Apex transcription environment not available. "
+                        "Requires conda env 'whisper-hindi' with whisper_timestamped installed. "
                         "Alternative: Use analyze_reel_with_gemini for AI-powered transcription without local dependencies."
                     ],
                     "temp_dir": str(TMP_DIR),
@@ -282,7 +235,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                     message=f"Transcribing reel {i + 1}/{total_reels}...",
                 )
 
-                srt_path = run_caption(video_path)
+                srt_path = run_apex_transcription(video_path)
 
                 if not srt_path or not srt_path.exists():
                     logger.warning("Skipping %s: transcription failed", reel_id)
@@ -346,8 +299,8 @@ def register_transcription_tools(mcp: FastMCP) -> None:
         try:
             ensure_directories()
 
-            # Check for caption CLI dependency upfront
-            if not is_caption_available():
+            # Check for Apex transcription dependency upfront
+            if not is_apex_available():
                 return {
                     "reel_id": reel_url.rstrip("/").split("/reel/")[-1].split("?")[0],
                     "video_url": None,
@@ -355,8 +308,8 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                     "transcript_preview": None,
                     "reel_url": reel_url,
                     "warnings": [
-                        "The 'caption' CLI tool is not installed. Transcription requires it. "
-                        "Install with: pip install caption (or see https://github.com/ufal/whisper). "
+                        "Apex transcription environment not available. "
+                        "Requires conda env 'whisper-hindi' with whisper_timestamped installed. "
                         "Alternative: Use analyze_reel_with_gemini for AI-powered transcription without local dependencies."
                     ],
                 }
@@ -402,7 +355,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                 progress=50, total=100, message="Transcribing audio..."
             )
 
-            srt_path = run_caption(video_path)
+            srt_path = run_apex_transcription(video_path)
 
             if not srt_path:
                 raise Exception("Transcription failed")

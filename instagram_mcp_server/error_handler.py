@@ -183,4 +183,8 @@ def raise_tool_error(exception: Exception, context: str = "") -> NoReturn:
 
     else:
         logger.error("Unexpected error%s: %s", ctx, exception, exc_info=True)
-        raise exception
+        _raise_tool_error_with_diagnostics(
+            exception,
+            f"Unexpected error: {type(exception).__name__}: {exception}",
+            context=context,
+        )

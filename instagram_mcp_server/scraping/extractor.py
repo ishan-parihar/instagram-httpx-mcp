@@ -1125,40 +1125,94 @@ class InstagramExtractor:
             const results = [];
             for (let i = 0; i < Math.min(anchors.length, maxReels); i++) {
                 const a = anchors[i];
-                // Skip extension-injected anchors
                 if (a.href.startsWith('chrome-extension:') || a.href.startsWith('moz-extension:')) continue;
 
                 const href = a.href || '';
                 const match = href.match(/\/reel\/([A-Za-z0-9_-]+)/);
                 const reelId = match ? match[1] : '';
 
-                // Get thumbnail: prefer largest CDN image, skip extension icons
-                const imgs = Array.from(a.querySelectorAll('img'));
+                // Get thumbnail from multiple strategies (Instagram lazy-loads images)
                 let thumbnail = null;
-                let largestArea = 0;
-                for (const img of imgs) {
-                    const src = img.src || img.getAttribute('src') || '';
-                    if (src.startsWith('chrome-extension:') || src.startsWith('moz-extension:') || src.startsWith('data:')) continue;
-                    if (src.includes('cdninstagram.com')) {
-                        const area = (img.width || 0) * (img.height || 0);
-                        if (area > largestArea) {
-                            largestArea = area;
-                            thumbnail = src;
+
+                const extractCdnUrl = (url) => {
+                    if (!url) return null;
+                    url = url.trim().split(' ')[0];
+                    if (url.startsWith('chrome-extension:') || url.startsWith('moz-extension:') || url.startsWith('data:')) return null;
+                    if (url.includes('cdninstagram.com') || url.includes('instagram.f')) return url;
+                    return null;
+                };
+
+                // Strategy 1: Check descendant divs with background-image (Instagram's current grid layout)
+                const bgDiv = a.querySelector('div[style*="background-image"][style*="instagram"]');
+                if (bgDiv) {
+                    const style = bgDiv.getAttribute('style') || '';
+                    const urlStart = style.indexOf('url(');
+                    if (urlStart !== -1) {
+                        let urlInner = style.substring(urlStart + 4).trim();
+                        if (urlInner.startsWith('"') || urlInner.startsWith("'")) {
+                            urlInner = urlInner.substring(1);
                         }
+                        const endIdx = urlInner.search(/["')\s]/);
+                        const url = endIdx !== -1 ? urlInner.substring(0, endIdx) : urlInner;
+                        if (url.includes('instagram')) thumbnail = url;
                     }
                 }
-                // Fallback: use src if it's a CDN image (no size data)
-                if (!thumbnail && imgs.length > 0) {
+
+                // Strategy 2: Check img elements (fallback for older layouts)
+                if (!thumbnail) {
+                    const imgs = Array.from(a.querySelectorAll('img'));
+                    let largestArea = 0;
                     for (const img of imgs) {
-                        const src = img.src || img.getAttribute('src') || '';
-                        if (src.includes('cdninstagram.com') && !src.startsWith('chrome-extension:')) {
-                            thumbnail = src;
-                            break;
+                        const srcset = img.srcset || img.getAttribute('srcset') || '';
+                        if (srcset) {
+                            const entries = srcset.split(',').map(e => e.trim());
+                            for (const entry of entries) {
+                                const url = entry.split(/\s+/)[0];
+                                const cdnUrl = extractCdnUrl(url);
+                                if (cdnUrl) { thumbnail = cdnUrl; break; }
+                            }
+                        }
+                        if (!thumbnail) {
+                            const dataSrc = img.dataset?.src || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
+                            const cdnUrl = extractCdnUrl(dataSrc);
+                            if (cdnUrl) { thumbnail = cdnUrl; }
+                        }
+                        if (!thumbnail) {
+                            const src = img.src || img.getAttribute('src') || '';
+                            const cdnUrl = extractCdnUrl(src);
+                            if (cdnUrl) {
+                                const area = (img.width || 0) * (img.height || 0);
+                                if (area > largestArea) { largestArea = area; thumbnail = cdnUrl; }
+                            }
                         }
                     }
                 }
 
-                // Try to get view count from aria-label or nearby text
+                // Strategy 2: Check <picture><source> elements
+                if (!thumbnail) {
+                    const pictures = Array.from(a.querySelectorAll('picture'));
+                    for (const pic of pictures) {
+                        const sources = Array.from(pic.querySelectorAll('source'));
+                        for (const src of sources) {
+                            const srcset = src.srcset || src.getAttribute('srcset') || '';
+                            if (srcset) {
+                                const url = srcset.split(',')[0].split(/\s+/)[0];
+                                const cdnUrl = extractCdnUrl(url);
+                                if (cdnUrl) { thumbnail = cdnUrl; break; }
+                            }
+                        }
+                        if (thumbnail) break;
+                    }
+                }
+
+                // Strategy 3: Last resort - any CDN URL found in the anchor's innerHTML
+                if (!thumbnail) {
+                    const htmlMatch = a.innerHTML.match(/https?:\/\/[^"'\s]*cdninstagram\.com[^"'\s]*/);
+                    if (htmlMatch) {
+                        thumbnail = htmlMatch[0];
+                    }
+                }
+
                 let viewCountText = '';
                 const ariaLabel = a.getAttribute('aria-label') || '';
                 if (ariaLabel) {
@@ -1572,6 +1626,14 @@ class InstagramExtractor:
 
             # Extract structured reel data from the grid
             reels_data = await self._extract_reels_from_grid(max_reels)
+
+            # Race-condition retry: if 0 reels found, wait and re-scroll
+            if not reels_data:
+                logger.debug("No reels on first attempt, retrying with extra wait...")
+                await asyncio.sleep(2.0)
+                await scroll_to_bottom(self._page, pause_time=0.5, max_scrolls=scrolls)
+                await asyncio.sleep(1.0)
+                reels_data = await self._extract_reels_from_grid(max_reels)
 
             # Parse view_count_text into integer view_count for each reel
             for reel in reels_data:
