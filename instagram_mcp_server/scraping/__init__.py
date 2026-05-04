@@ -1,6 +1,6 @@
-"""Scraping engine using innerText extraction."""
+"""Scraping engine — API client replaces the old DOM-based extractor."""
 
-from .extractor import InstagramExtractor
+from .api_client import InstagramAPIClient
 from .fields import (
     INSIGHTS_SECTIONS,
     USER_SECTIONS,
@@ -10,7 +10,7 @@ from .fields import (
 
 __all__ = [
     "INSIGHTS_SECTIONS",
-    "InstagramExtractor",
+    "InstagramAPIClient",
     "USER_SECTIONS",
     "parse_insights_sections",
     "parse_user_sections",

@@ -1,16 +1,9 @@
 """
-Browser management package for Instagram scraping.
+Cookie-based session management for Instagram scraping.
 
-This package provides Patchright browser management using
-BrowserManager with persistent context. It implements a singleton pattern for
-browser instances to ensure profile persistence across multiple tool calls
-while handling authentication and proper resource cleanup.
-
-Key Components:
-- Patchright browser initialization via BrowserManager with persistent profile
-- Instagram authentication with automatic profile persistence
-- Singleton pattern for browser reuse across tools
-- Automatic cleanup and resource management
+No browser is required.  Instagram session cookies are extracted from a real
+browser once, saved to ``~/.instagram-mcp/profile/cookies.json``, and reused
+for direct API calls via the private Instagram web API.
 """
 
 from instagram_mcp_server.drivers.browser import (
@@ -18,8 +11,8 @@ from instagram_mcp_server.drivers.browser import (
     check_rate_limit,
     close_browser,
     ensure_authenticated,
-    get_or_create_browser,
     get_profile_dir,
+    load_cookies,
     profile_exists,
     reset_browser_for_testing,
     set_headless,
@@ -31,8 +24,8 @@ __all__ = [
     "check_rate_limit",
     "close_browser",
     "ensure_authenticated",
-    "get_or_create_browser",
     "get_profile_dir",
+    "load_cookies",
     "profile_exists",
     "reset_browser_for_testing",
     "set_headless",

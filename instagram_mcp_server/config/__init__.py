@@ -8,11 +8,10 @@ loading from CLI arguments and environment variables.
 import logging
 
 from .loaders import load_config
-from .schema import AppConfig, BrowserConfig, ServerConfig
+from .schema import AppConfig, CookieConfig, ServerConfig
 
 logger = logging.getLogger(__name__)
 
-# Singleton pattern for configuration
 _config: AppConfig | None = None
 
 
@@ -34,7 +33,7 @@ def reset_config() -> None:
 
 __all__ = [
     "AppConfig",
-    "BrowserConfig",
+    "CookieConfig",
     "ServerConfig",
     "get_config",
     "reset_config",

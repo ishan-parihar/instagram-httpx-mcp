@@ -33,39 +33,32 @@ def ensure_directories():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-async def download_video(video_url: str, output_path: Path, page=None) -> bool:
+async def download_video(video_url: str, output_path: Path, cookies: dict[str, str] | None = None) -> bool:
     """Download video from Instagram URL.
 
-    When a Playwright page is provided, extracts session cookies from the
-    browser context so the download request is authenticated.  Without
-    cookies Instagram CDN returns 403 Forbidden.
+    Uses Instagram session cookies dict for authenticated download.
+    Without cookies Instagram CDN returns 403 Forbidden.
     """
     try:
         headers: dict[str, str] = {
             "Referer": "https://www.instagram.com/",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
         }
+        if cookies:
+            cookie_header = "; ".join(
+                f"{k}={v}" for k, v in cookies.items() if v
+            )
+            if cookie_header:
+                headers["Cookie"] = cookie_header
 
-        if page is not None:
-            try:
-                cookies = await page.context.cookies()
-                cookie_header = "; ".join(
-                    f"{c['name']}={c['value']}" for c in cookies if c.get("value")
-                )
-                if cookie_header:
-                    headers["Cookie"] = cookie_header
-            except Exception as e:
-                logger.warning("Could not extract cookies for video download: %s", e)
-
-        async with httpx.AsyncClient(headers=headers) as client:
-            async with client.stream("GET", video_url, timeout=30.0) as response:
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+            async with client.stream("GET", video_url, timeout=60.0) as response:
                 if response.status_code != 200:
                     logger.error("Download failed: HTTP %d", response.status_code)
                     return False
-
                 with open(output_path, "wb") as f:
                     async for chunk in response.aiter_bytes(chunk_size=8192):
                         f.write(chunk)
-
         logger.info("Downloaded: %s", output_path.name)
         return True
     except Exception as e:
@@ -196,18 +189,14 @@ def register_transcription_tools(mcp: FastMCP) -> None:
                     message=f"Extracting video URL {i + 1}/{total_reels}...",
                 )
 
-                # Navigate to the reel page to extract the actual CDN video URL
+                # Use API client to get the post details with CDN video URL
                 try:
-                    await extractor._navigate_to_page(reel_page_url)
-                    # Wait for video element or article to render
-                    try:
-                        await extractor._page.wait_for_selector(
-                            'video, article, [role="main"]',
-                            timeout=10000,
-                        )
-                    except Exception:
-                        logger.debug("Video element not found, proceeding anyway")
-                    video_url = await extractor.extract_video_url()
+                    details = await extractor.get_post_details(reel_page_url)
+                    post_details = details.get("post_details", {})
+                    video_url = post_details.get("video_url", "")
+                    if not video_url:
+                        # Fallback: try media_url for image posts
+                        video_url = post_details.get("media_url", "")
                     if not video_url:
                         logger.warning(
                             "Skipping %s: could not extract video CDN URL", reel_id
@@ -225,7 +214,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
 
                 video_path = TMP_DIR / f"{reel_id}.mp4"
 
-                if not await download_video(video_url, video_path, extractor._page):
+                if not await download_video(video_url, video_path, extractor._cookies):
                     logger.warning("Skipping %s: download failed", reel_id)
                     continue
 
@@ -324,18 +313,10 @@ def register_transcription_tools(mcp: FastMCP) -> None:
 
             logger.info("Transcribing reel: %s", reel_id)
 
-            # Navigate to the reel page and extract the actual CDN video URL
-            await extractor._navigate_to_page(reel_url)
-            # Wait for video element or article to render
-            try:
-                await extractor._page.wait_for_selector(
-                    'video, article, [role="main"]',
-                    timeout=10000,
-                )
-            except Exception:
-                logger.debug("Video element not found, proceeding anyway")
-
-            video_url = await extractor.extract_video_url()
+            # Use API client to get the post details with CDN video URL
+            details = await extractor.get_post_details(reel_url)
+            post_details = details.get("post_details", {})
+            video_url = post_details.get("video_url", "") or post_details.get("media_url", "")
 
             if not video_url:
                 raise Exception(
@@ -348,7 +329,7 @@ def register_transcription_tools(mcp: FastMCP) -> None:
             )
 
             video_path = TMP_DIR / f"{reel_id}.mp4"
-            if not await download_video(video_url, video_path, extractor._page):
+            if not await download_video(video_url, video_path, extractor._cookies):
                 raise Exception("Video download failed")
 
             await ctx.report_progress(

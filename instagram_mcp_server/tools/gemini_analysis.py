@@ -2,7 +2,7 @@
 Instagram Reel Analysis using Google Gemini 2.0 Flash.
 
 Fast multimodal analysis of Instagram reels without local transcription.
-Uses google-genai (the successor to the deprecated google.generativeai).
+Uses the Instagram API client for video URL extraction and cookie auth.
 """
 
 import asyncio
@@ -25,29 +25,30 @@ logger = logging.getLogger(__name__)
 ANALYSIS_DIR = Path.home() / ".instagram-mcp" / "gemini_analysis"
 
 
-async def download_video_bytes(video_url: str, page=None) -> bytes | None:
+async def download_video_bytes(video_url: str, cookies: dict[str, str] | None = None) -> bytes | None:
     """Download video as bytes for Gemini upload.
 
-    When a Playwright page is provided, extracts session cookies from the
-    browser context so the download request is authenticated.  Without
-    cookies Instagram CDN returns 403 Forbidden.
+    When a cookies dict is provided, attaches Instagram session cookies to
+    the download request so it is authenticated.  Without cookies
+    Instagram CDN returns 403 Forbidden.
     """
     try:
         headers: dict[str, str] = {
             "Referer": "https://www.instagram.com/",
+            "User-Agent": (
+                "Mozilla/5.0 (Linux; Android 13; Pixel 8) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Mobile Safari/537.36"
+            ),
         }
 
-        # Attach Instagram session cookies if we have a browser context
-        if page is not None:
-            try:
-                cookies = await page.context.cookies()
-                cookie_header = "; ".join(
-                    f"{c['name']}={c['value']}" for c in cookies if c.get("value")
-                )
-                if cookie_header:
-                    headers["Cookie"] = cookie_header
-            except Exception as e:
-                logger.warning("Could not extract cookies for video download: %s", e)
+        # Attach Instagram session cookies if available
+        if cookies:
+            cookie_header = "; ".join(
+                f"{k}={v}" for k, v in cookies.items() if v
+            )
+            if cookie_header:
+                headers["Cookie"] = cookie_header
 
         async with httpx.AsyncClient(headers=headers) as client:
             response = await client.get(video_url, timeout=30.0)
@@ -274,20 +275,10 @@ def register_gemini_tools(mcp: FastMCP) -> None:
                 progress=10, total=100, message="Fetching reel metadata..."
             )
 
-            # Navigate to reel page to extract the actual CDN video URL
-            await extractor._navigate_to_page(reel_url)
-            await asyncio.sleep(1.0)
-
-            video_url = await extractor.extract_video_url()
-            if not video_url:
-                thumbnail_url = await extractor.extract_thumbnail_url()
-                if thumbnail_url:
-                    logger.info("Video URL not found, using thumbnail for analysis")
-                    video_url = thumbnail_url
-                else:
-                    og_data = await extractor.extract_og_metadata()
-                    video_url = og_data.get("video") or og_data.get("video:secure_url")
-
+            # Fetch reel video URL via the API client
+            details = await extractor.get_post_details(reel_url)
+            post_details = details.get("post_details", {})
+            video_url = post_details.get("video_url", "") or post_details.get("media_url", "")
             if not video_url:
                 raise Exception(
                     "Could not extract video URL from reel. "
@@ -299,7 +290,7 @@ def register_gemini_tools(mcp: FastMCP) -> None:
             )
 
             # Download video bytes (with authenticated cookies)
-            video_bytes = await download_video_bytes(video_url, extractor._page)
+            video_bytes = await download_video_bytes(video_url, extractor._cookies)
 
             if not video_bytes:
                 raise Exception("Video download failed")
@@ -410,21 +401,15 @@ def register_gemini_tools(mcp: FastMCP) -> None:
                 )
 
                 try:
-                    # Navigate to reel page to extract the actual video URL
-                    await extractor._navigate_to_page(reel_url)
-                    await asyncio.sleep(1.0)
-
-                    video_url = await extractor.extract_video_url()
+                    # Fetch reel video URL via the API client
+                    details = await extractor.get_post_details(reel_url)
+                    post_details = details.get("post_details", {})
+                    video_url = post_details.get("video_url", "") or post_details.get("media_url", "")
                     if not video_url:
-                        # Fallback: try thumbnail
-                        thumbnail_url = await extractor.extract_thumbnail_url()
-                        if thumbnail_url:
-                            video_url = thumbnail_url
-                        else:
-                            raise Exception("Could not extract video or thumbnail URL")
+                        raise Exception("Could not extract video URL from reel")
 
-                    # Download video bytes from the actual CDN URL (with cookies)
-                    video_bytes = await download_video_bytes(video_url, extractor._page)
+                    # Download video bytes (with authenticated cookies)
+                    video_bytes = await download_video_bytes(video_url, extractor._cookies)
                     if not video_bytes:
                         raise Exception("Video download failed")
 

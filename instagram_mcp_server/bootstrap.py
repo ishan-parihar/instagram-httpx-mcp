@@ -1,49 +1,107 @@
-"""Managed runtime bootstrap for browser setup and Instagram login."""
+"""Managed bootstrap for Instagram session authentication.
+
+No browser setup is required.  The only precondition for API calls is a valid
+Instagram session cookie file on disk.
+"""
 
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from enum import Enum
 import json
 import logging
 import os
-from pathlib import Path
 import shutil
-import sys
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
 from typing import NoReturn
 
 from fastmcp import Context
 
 from instagram_mcp_server.authentication import get_authentication_source
-from instagram_mcp_server.common_utils import (
-    secure_mkdir,
-    secure_write_text,
-    utcnow_iso,
-)
+from instagram_mcp_server.common_utils import secure_mkdir, utcnow_iso
+from instagram_mcp_server.config.loaders import EnvironmentKeys
 from instagram_mcp_server.drivers.browser import get_profile_dir
 from instagram_mcp_server.exceptions import (
     AuthenticationBootstrapFailedError,
     AuthenticationInProgressError,
     AuthenticationStartedError,
-    BrowserSetupFailedError,
-    BrowserSetupInProgressError,
     DockerHostLoginRequiredError,
 )
 from instagram_mcp_server.session_state import (
     auth_root_dir,
-    get_runtime_id,
     portable_cookie_path,
     profile_exists,
-    runtime_profiles_root,
     source_state_path,
+    write_source_state,
 )
 
 logger = logging.getLogger(__name__)
 
-_BROWSER_DIR = "patchright-browsers"
-_BROWSER_INSTALL_METADATA = "browser-install.json"
 _INVALID_STATE_PREFIX = "invalid-state-"
+
+INSTAGRAM_COOKIES_VAR = EnvironmentKeys.INSTAGRAM_COOKIES
+
+
+def _ensure_cookies_from_env() -> None:
+    """If ``INSTAGRAM_COOKIES`` is set, write cookies.json + source-state.json so
+    the existing file-based bootstrap checks pass transparently.
+
+    This is the primary flow for AI agents running in headless environments.
+    """
+    raw = os.environ.get(INSTAGRAM_COOKIES_VAR)
+    if not raw:
+        return
+
+    profile_dir = get_profile_dir()
+    cookie_path = portable_cookie_path(profile_dir)
+
+    # Parse env var — accepts flat dict or list-of-dicts format
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.error("INSTAGRAM_COOKIES is not valid JSON; ignoring")
+        return
+
+    if isinstance(data, dict):
+        cookies = {k: v for k, v in data.items() if k and v}
+    elif isinstance(data, list):
+        cookies = {c["name"]: c["value"] for c in data if "name" in c and "value" in c}
+    else:
+        logger.error("INSTAGRAM_COOKIES must be a JSON object or array; ignoring")
+        return
+
+    if "sessionid" not in cookies:
+        logger.error("INSTAGRAM_COOKIES must include 'sessionid'; ignoring")
+        return
+
+    # Write cookies.json in the server's portable format
+    cookie_data = {
+        "cookies": [
+            {
+                "name": name,
+                "value": value,
+                "domain": ".instagram.com",
+                "path": "/",
+                "secure": True,
+                "expires": -1,
+            }
+            for name, value in cookies.items()
+        ],
+        "imported_from": "env",
+    }
+    cookie_path.parent.mkdir(parents=True, exist_ok=True)
+    cookie_path.write_text(json.dumps(cookie_data, indent=2))
+    cookie_path.chmod(0o600)
+    logger.info("Wrote %d cookies from INSTAGRAM_COOKIES env var", len(cookies))
+
+    # Ensure profile directory exists
+    auth_root = auth_root_dir(profile_dir)
+    auth_root.mkdir(parents=True, exist_ok=True)
+
+    # Write a minimal source-state.json so bootstrap checks pass
+    source_state_path(profile_dir).parent.mkdir(parents=True, exist_ok=True)
+    write_source_state(source_profile_dir=profile_dir, preferred_browser="env")
 
 
 class RuntimePolicy(str, Enum):
@@ -53,7 +111,6 @@ class RuntimePolicy(str, Enum):
 
 class SetupState(str, Enum):
     IDLE = "not_started"
-    RUNNING = "installing"
     READY = "ready"
     FAILED = "failed"
 
@@ -93,7 +150,6 @@ def reset_bootstrap_for_testing() -> None:
             task.cancel()
     _state = BootstrapState()
     _lock = asyncio.Lock()
-    os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
 
 
 def get_runtime_policy() -> RuntimePolicy:
@@ -102,33 +158,26 @@ def get_runtime_policy() -> RuntimePolicy:
         return _state.runtime_policy
     return (
         RuntimePolicy.DOCKER
-        if get_runtime_id().endswith("-container")
+        if _get_runtime_id().endswith("-container")
         else RuntimePolicy.MANAGED
     )
 
 
-def browsers_path() -> Path:
-    """Return the shared user-level Patchright browser cache path."""
-    return auth_root_dir(get_profile_dir()) / _BROWSER_DIR
+def _get_runtime_id() -> str:
+    from instagram_mcp_server.session_state import get_runtime_id
 
-
-def install_metadata_path() -> Path:
-    """Return the browser install metadata path."""
-    return auth_root_dir(get_profile_dir()) / _BROWSER_INSTALL_METADATA
-
-
-def configure_browser_environment() -> Path:
-    """Ensure the shared browser cache path is configured."""
-    browser_dir = browsers_path()
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(browser_dir))
-    return browser_dir
+    return get_runtime_id()
 
 
 def initialize_bootstrap(runtime_policy: RuntimePolicy | str | None = None) -> None:
-    """Initialize bootstrap state and configure the shared browser cache."""
+    """Initialize bootstrap state."""
     if _state.initialized:
         return
-    configure_browser_environment()
+
+    # If INSTAGRAM_COOKIES env var is set, write the cookie profile before
+    # any tool call so file-based bootstrap checks pass automatically.
+    _ensure_cookies_from_env()
+
     _state.runtime_policy = RuntimePolicy(runtime_policy or get_runtime_policy())
     _state.initialized = True
 
@@ -139,39 +188,18 @@ def get_bootstrap_state() -> BootstrapState:
 
 
 async def start_background_browser_setup_if_needed() -> None:
-    """Start shared background browser setup for managed runtimes if needed."""
+    """No-op: there is no browser to set up."""
     initialize_bootstrap()
     if get_runtime_policy() != RuntimePolicy.MANAGED:
         return
-
     async with _lock:
-        if _browser_setup_ready():
-            _state.setup_state = SetupState.READY
-            _state.setup_completed_at = _state.setup_completed_at or utcnow_iso()
-            return
-        if _state.setup_task is not None and not _state.setup_task.done():
-            return
-        _start_browser_setup_task_locked()
+        _state.setup_state = SetupState.READY
+        _state.setup_completed_at = _state.setup_completed_at or utcnow_iso()
 
 
 def browser_setup_ready() -> bool:
-    metadata_path = install_metadata_path()
-    configured_browsers_path = Path(
-        os.environ.get("PLAYWRIGHT_BROWSERS_PATH", str(browsers_path()))
-    )
-    if not metadata_path.exists() or not configured_browsers_path.exists():
-        return False
-    if not any(configured_browsers_path.iterdir()):
-        return False
-    try:
-        payload = json.loads(metadata_path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return False
-    return (
-        isinstance(payload, dict)
-        and payload.get("browser_name") == "chromium"
-        and payload.get("installer_name") == "patchright"
-    )
+    """No browser setup required.  Always ``True``."""
+    return True
 
 
 def _browser_setup_ready() -> bool:
@@ -179,138 +207,24 @@ def _browser_setup_ready() -> bool:
     return browser_setup_ready()
 
 
-def _start_browser_setup_task_locked() -> None:
-    _state.setup_state = SetupState.RUNNING
-    _state.setup_started_at = utcnow_iso()
-    _state.last_error = None
-    _state.setup_completed_at = None
-    _state.setup_task = asyncio.create_task(_run_browser_setup(), name="browser-setup")
-
-
-async def _run_browser_setup() -> None:
-    browser_dir = configure_browser_environment()
-    metadata_path = install_metadata_path()
-    secure_mkdir(browser_dir)
-
-    proc = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-m",
-        "patchright",
-        "install",
-        "chromium",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        output = "\n".join(
-            text for text in (stderr.decode().strip(), stdout.decode().strip()) if text
-        )
-        raise BrowserSetupFailedError(
-            output or "Patchright Chromium browser setup failed."
-        )
-
-    metadata = {
-        "version": 1,
-        "runtime_id": get_runtime_id(),
-        "installed_at": utcnow_iso(),
-        "browsers_path": str(browser_dir),
-        "browser_name": "chromium",
-        "installer_name": "patchright",
-    }
-    secure_write_text(
-        metadata_path, json.dumps(metadata, indent=2, sort_keys=True) + "\n"
-    )
+def configure_browser_environment() -> Path:
+    """No-op: there is no browser environment to configure."""
+    return get_profile_dir()
 
 
 def ensure_browser_installed() -> None:
-    """Install Patchright Chromium synchronously if not already present.
-
-    Used by CLI modes (--login, --status) to guarantee the browser exists
-    before launching it.  The normal server path uses async background setup
-    instead (non-blocking).
-    """
-    configure_browser_environment()
-    if browser_setup_ready():
-        return
-    print("   Installing Patchright Chromium browser...")
-    try:
-        asyncio.run(_run_browser_setup())
-    except Exception as exc:
-        print(f"   ❌ Browser installation failed: {exc}")
-        raise
-    print("   Browser installed.")
-
-
-def _safe_task_done(task: asyncio.Task[None] | None) -> bool:
-    return task is not None and task.done()
-
-
-async def _refresh_background_task_state() -> None:
-    if _safe_task_done(_state.setup_task):
-        task = _state.setup_task
-        assert task is not None
-        _state.setup_task = None
-        try:
-            task.result()
-        except asyncio.CancelledError:
-            _state.setup_state = SetupState.FAILED
-            _state.last_error = "Browser setup task was cancelled"
-            logger.warning("Patchright Chromium browser setup task cancelled")
-        except Exception as exc:
-            _state.setup_state = SetupState.FAILED
-            _state.last_error = str(exc)
-            logger.warning("Patchright Chromium browser setup failed: %s", exc)
-        else:
-            _state.setup_state = SetupState.READY
-            _state.setup_completed_at = utcnow_iso()
-
-    if _safe_task_done(_state.login_task):
-        task = _state.login_task
-        assert task is not None
-        _state.login_task = None
-        try:
-            task.result()
-        except asyncio.CancelledError:
-            _state.auth_state = AuthState.FAILED
-            _state.last_error = "Instagram login bootstrap task was cancelled"
-            logger.warning("Instagram login bootstrap task cancelled")
-        except Exception as exc:
-            _state.auth_state = AuthState.FAILED
-            _state.last_error = str(exc)
-            logger.warning("Instagram login bootstrap failed: %s", exc)
-        else:
-            _state.auth_state = AuthState.READY
-            _state.auth_completed_at = utcnow_iso()
+    """No-op: there is no browser to install."""
 
 
 async def ensure_tool_ready_or_raise(
     tool_name: str, ctx: Context | None = None
 ) -> None:
-    """Gate scrape/search tools on browser setup and authentication readiness."""
+    """Gate scrape/search tools on authentication readiness (cookie check)."""
     initialize_bootstrap()
-    await _refresh_background_task_state()
 
     if get_runtime_policy() == RuntimePolicy.DOCKER:
         _raise_if_docker_auth_missing()
         return
-
-    if _browser_setup_ready():
-        _state.setup_state = SetupState.READY
-    else:
-        if _state.setup_state in {SetupState.IDLE, SetupState.FAILED} and (
-            _state.setup_task is None or _state.setup_task.done()
-        ):
-            await start_background_browser_setup_if_needed()
-        if ctx is not None:
-            await ctx.report_progress(
-                progress=5,
-                total=100,
-                message=f"{tool_name}: Patchright Chromium browser setup still in progress",
-            )
-        raise BrowserSetupInProgressError(
-            "Instagram setup is not complete yet. The Patchright Chromium browser is still downloading in the background. Retry this tool in a few minutes."
-        )
 
     if _auth_ready():
         _state.auth_state = AuthState.READY
@@ -323,7 +237,9 @@ def _raise_if_docker_auth_missing() -> None:
     if _auth_ready():
         return
     raise DockerHostLoginRequiredError(
-        "No valid Instagram session is available in Docker. Run --login on the host machine to create a session, then retry this tool."
+        "No valid Instagram session is available in Docker. "
+        "Run --login on the host machine to create a session, "
+        "then retry this tool."
     )
 
 
@@ -347,8 +263,6 @@ def _has_source_state() -> bool:
 
 async def _start_login_if_needed(ctx: Context | None = None) -> None:
     async with _lock:
-        await _refresh_background_task_state()
-
         if _auth_ready():
             _state.auth_state = AuthState.READY
             return
@@ -361,7 +275,9 @@ async def _start_login_if_needed(ctx: Context | None = None) -> None:
                     message="Instagram login already in progress",
                 )
             raise AuthenticationInProgressError(
-                "No valid Instagram session is available yet. Instagram login is already in progress in a browser window. Complete login there, then retry this tool."
+                "No valid Instagram session is available yet. "
+                "Instagram login is already in progress in a browser window. "
+                "Complete login there, then retry this tool."
             )
 
         _move_invalid_auth_state_aside()
@@ -380,7 +296,9 @@ async def _start_login_if_needed(ctx: Context | None = None) -> None:
             message="Instagram login browser opened",
         )
     raise AuthenticationStartedError(
-        "No valid Instagram session was found. A login browser window has been opened. Sign in with your Instagram credentials there, then retry this tool."
+        "No valid Instagram session was found. "
+        "A login browser window has been opened. "
+        "Sign in with your Instagram credentials there, then retry this tool."
     )
 
 
@@ -392,22 +310,9 @@ async def start_login_if_needed(ctx: Context | None = None) -> None:
 async def invalidate_auth_and_trigger_relogin(
     ctx: Context | None = None,
 ) -> NoReturn:
-    """Force-invalidate stale auth state and trigger interactive login.
-
-    Unlike ``_start_login_if_needed()``, this ignores ``_auth_ready()`` — the
-    caller has already proven the session is invalid despite profile files
-    being present on disk.  The check-task → force-move → start-login sequence
-    is atomic under ``_lock`` so an in-flight login is never corrupted.
-
-    Raises:
-        AuthenticationStartedError: Login browser opened.
-        AuthenticationInProgressError: Login already running from a prior call.
-    """
+    """Force-invalidate stale auth state and trigger interactive login."""
     logger.warning("Invalidating stale auth state and triggering re-login")
     async with _lock:
-        await _refresh_background_task_state()
-
-        # If a login is already in progress, don't touch files — just report.
         if _state.login_task is not None and not _state.login_task.done():
             if ctx is not None:
                 await ctx.report_progress(
@@ -416,15 +321,12 @@ async def invalidate_auth_and_trigger_relogin(
                     message="Instagram login already in progress",
                 )
             raise AuthenticationInProgressError(
-                "No valid Instagram session is available yet. Instagram login is "
-                "already in progress in a browser window. Complete login there, "
-                "then retry this tool."
+                "No valid Instagram session is available yet. "
+                "Instagram login is already in progress in a browser window. "
+                "Complete login there, then retry this tool."
             )
 
-        # Force-move stale profile files (skip _auth_ready() guard).
         _force_move_auth_state_aside()
-
-        # Start fresh login.
         _state.auth_state = AuthState.STARTING
         _state.auth_started_at = utcnow_iso()
         _state.last_error = None
@@ -440,25 +342,18 @@ async def invalidate_auth_and_trigger_relogin(
             message="Instagram login browser opened",
         )
     raise AuthenticationStartedError(
-        "Session expired. A login browser window has been opened. "
+        "Session expired. "
+        "A login browser window has been opened. "
         "Sign in with your Instagram credentials there, then retry this tool."
     )
 
 
 def _move_auth_state_aside(*, force: bool = False) -> None:
-    """Move auth artifacts to a timestamped backup directory.
-
-    Args:
-        force: If True, skip the ``_auth_ready()`` guard.  Used by
-            ``invalidate_auth_and_trigger_relogin`` when the caller already
-            knows the session is stale.
-    """
     profile_dir = get_profile_dir()
     targets = [
         profile_dir,
         portable_cookie_path(profile_dir),
         source_state_path(profile_dir),
-        runtime_profiles_root(profile_dir),
     ]
     existing = [target for target in targets if target.exists()]
     if not existing:
@@ -466,17 +361,14 @@ def _move_auth_state_aside(*, force: bool = False) -> None:
     if not force and _auth_ready():
         return
 
-    backup_dir = (
-        auth_root_dir(profile_dir)
-        / f"{_INVALID_STATE_PREFIX}{utcnow_iso().replace(':', '-')}"
-    )
+    auth_root = auth_root_dir(profile_dir)
+    backup_dir = auth_root / f"{_INVALID_STATE_PREFIX}{utcnow_iso().replace(':', '-')}"
     secure_mkdir(backup_dir)
     for target in existing:
         shutil.move(str(target), str(backup_dir / target.name))
 
 
 def _force_move_auth_state_aside() -> None:
-    """Move auth artifacts aside unconditionally (no ``_auth_ready()`` guard)."""
     _move_auth_state_aside(force=True)
 
 
@@ -485,193 +377,14 @@ def _move_invalid_auth_state_aside() -> None:
 
 
 async def _run_login_flow() -> None:
-    """Run interactive login flow."""
+    """Run interactive cookie-import login flow."""
     _state.auth_state = AuthState.IN_PROGRESS
 
-    from instagram_mcp_server.config import get_config
-    from instagram_mcp_server.drivers.browser import _cdp_mode_enabled
+    from instagram_mcp_server.cookie_import import import_cookies_interactive
 
-    if _cdp_mode_enabled():
-        success = await _cdp_login_flow()
-    else:
-        from instagram_mcp_server.cookie_import import import_cookies_interactive
-
-        config = get_config()
-        browser_id = config.browser.preferred_browser or None
-        success = import_cookies_interactive(browser_id=browser_id)
-
+    success = import_cookies_interactive()
     if not success:
         raise AuthenticationBootstrapFailedError(
-            "Instagram login was not completed. Retry the tool call to reopen the browser and continue setup."
+            "Instagram login was not completed. "
+            "Retry the tool call to reopen the browser and continue setup."
         )
-
-
-async def _cdp_login_flow() -> bool:
-    """Guide user through CDP mode login.
-
-    Returns:
-        True if login was successful, False otherwise
-    """
-    from instagram_mcp_server.drivers.brave_cdp import (
-        connect_to_brave,
-        find_brave_process,
-        verify_instagram_session,
-    )
-    from instagram_mcp_server.session_state import (
-        portable_cookie_path,
-        write_source_state,
-    )
-
-    # Check if Brave is already running with CDP
-    brave_running = find_brave_process()
-
-    if not brave_running:
-        # Try to auto-launch Brave
-        print("\n" + "=" * 60)
-        print("CDP MODE: Launching Brave browser...")
-        print("=" * 60)
-
-        try:
-            import subprocess
-
-            # Find Brave executable
-            brave_paths = [
-                "/opt/brave-bin/brave",
-                "/usr/bin/brave-browser",
-                "/usr/bin/brave",
-            ]
-            brave_exe = None
-            for path in brave_paths:
-                import os
-
-                if os.path.exists(path):
-                    brave_exe = path
-                    break
-
-            if brave_exe:
-                print(f"\nAuto-launching Brave: {brave_exe}")
-                subprocess.Popen(
-                    [
-                        brave_exe,
-                        "--remote-debugging-port=9222",
-                        "--no-first-run",
-                        "--no-default-browser-check",
-                        "https://www.instagram.com/",
-                    ],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
-                print("✓ Brave launched! Waiting for it to be ready...")
-            else:
-                print("\n⚠ Brave browser not found at standard locations.")
-                print("\nPlease launch Brave manually:")
-                print("  brave-browser --remote-debugging-port=9222")
-
-        except Exception as e:
-            logger.debug(f"Failed to auto-launch Brave: {e}")
-            print("\n⚠ Could not auto-launch Brave.")
-            print("\nPlease launch Brave manually:")
-            print("  uv run instagram-launch-brave")
-            print("  OR")
-            print("  brave-browser --remote-debugging-port=9222")
-
-        # Wait for Brave to start (poll for 2 minutes)
-        import asyncio
-
-        print("\nWaiting for Brave to start with remote debugging...")
-        for i in range(24):  # 2 minutes, check every 5 seconds
-            await asyncio.sleep(5)
-            if find_brave_process():
-                print("✓ Brave detected! Continuing...")
-                brave_running = True
-                break
-            if i % 3 == 0:  # Print reminder every 15 seconds
-                print(f"  Still waiting... ({(i + 1) * 5}s elapsed)")
-
-        if not brave_running:
-            print("\n" + "=" * 60)
-            print("⚠ TIMEOUT: Brave not detected after 2 minutes")
-            print("=" * 60)
-            print("\nCDP mode requires Brave to be running with remote debugging.")
-            print("\nTo fix this:")
-            print("  1. Launch Brave: uv run instagram-launch-brave")
-            print("  2. Or manually: brave-browser --remote-debugging-port=9222")
-            print("  3. Log into Instagram in that browser window")
-            print("  4. Retry the Instagram tool")
-            print("\nAlternatively, disable CDP mode (not recommended):")
-            print("  uv run -m instagram_mcp_server --no-cdp")
-            return False
-
-    # Brave is running - connect and verify/export session
-    print("\n" + "=" * 60)
-    print("CDP MODE: Connecting to Brave browser...")
-    print("=" * 60)
-
-    try:
-        browser = await connect_to_brave()
-    except Exception as e:
-        logger.error(f"Failed to connect to Brave: {e}")
-        print("\n⚠ Failed to connect to Brave browser.")
-        print(f"   Error: {e}")
-        print("\nMake sure Brave is running with --remote-debugging-port=9222")
-        return False
-
-    try:
-        # Verify Instagram session exists
-        print("\nVerifying Instagram session...")
-        has_session = await verify_instagram_session(browser)
-
-        if not has_session:
-            print("\n" + "=" * 60)
-            print("⚠ NOT LOGGED IN: No Instagram session found in Brave")
-            print("=" * 60)
-            print("\nPlease log into Instagram in the Brave browser window:")
-            print("  1. Navigate to https://www.instagram.com/")
-            print("  2. Log in with your credentials")
-            print("  3. Retry the Instagram tool to export the session")
-            return False
-
-        # Export cookies from CDP session
-        profile_dir = get_profile_dir()
-        cookie_path = portable_cookie_path(profile_dir)
-
-        print(f"\nExporting cookies to {cookie_path}...")
-
-        # Get the first context (or create one if needed)
-        if not browser.contexts:
-            context = await browser.new_context()
-        else:
-            context = browser.contexts[0]
-
-        # Export cookies
-        cookies = await context.cookies()
-        import json
-        from instagram_mcp_server.common_utils import secure_write_text
-
-        secure_write_text(cookie_path, json.dumps(cookies, indent=2))
-        print(f"✓ Exported {len(cookies)} cookies")
-
-        # Write source state
-        print("Writing source state metadata...")
-        source_state = write_source_state(profile_dir)
-        print(f"✓ Source session generation: {source_state.login_generation}")
-
-        print("\n" + "=" * 60)
-        print("✓ CDP MODE READY: Instagram session exported successfully")
-        print("=" * 60)
-        print(f"\nProfile saved to {profile_dir}")
-        print("You can now use all Instagram MCP tools.")
-        return True
-
-    except Exception as e:
-        logger.error(f"Failed to export Instagram session: {e}")
-        print(f"\n⚠ Failed to export session: {e}")
-        return False
-    finally:
-        # Don't close the browser - it's the user's running Brave instance
-        # Just disconnect the CDP connection
-        try:
-            await browser.close()
-        except Exception:
-            pass

@@ -208,3 +208,10 @@ scripts/snapshot_dumps/
 
 # Debug artifacts
 .debug/
+
+# Agent/tool artifacts
+.contexty/
+.hive/
+.memsearch/
+.sisyphus/
+=3.4.0

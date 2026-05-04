@@ -7,7 +7,6 @@ structure with type-safe configuration objects and default values.
 
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Literal
 
 logger = logging.getLogger(__name__)
@@ -18,53 +17,15 @@ class ConfigurationError(Exception):
 
 
 @dataclass
-class BrowserConfig:
-    """Configuration for browser settings."""
+class CookieConfig:
+    """Configuration for cookie-based Instagram API access."""
 
-    headless: bool = True
-    slow_mo: int = 0  # Milliseconds between browser actions (debugging)
-    user_agent: str | None = None  # Custom browser user agent
-    viewport_width: int = 1280
-    viewport_height: int = 720
-    default_timeout: int = (
-        3000  # Milliseconds for page operations (optimized for speed)
-    )
-    chrome_path: str | None = None  # Path to Chrome/Chromium executable
-    user_data_dir: str = "~/.instagram-mcp/profile"  # Persistent browser profile
-
-    # CDP mode configuration
-    use_cdp_mode: bool = False  # Isolated cookie-imported browser by default
-    cdp_port: int = 9222  # CDP debugging port
-
-    # Multi-browser support
-    preferred_browser: str | None = (
-        None  # Browser ID from cookie_import.BROWSER_REGISTRY
-    )
+    profile_dir: str = "~/.instagram-mcp/profile"
+    preferred_browser: str | None = None
 
     def validate(self) -> None:
-        """Validate browser configuration values."""
-        if self.slow_mo < 0:
-            raise ConfigurationError(
-                f"slow_mo must be non-negative, got {self.slow_mo}"
-            )
-        if self.default_timeout <= 0:
-            raise ConfigurationError(
-                f"default_timeout must be positive, got {self.default_timeout}"
-            )
-        if self.viewport_width <= 0 or self.viewport_height <= 0:
-            raise ConfigurationError(
-                f"viewport dimensions must be positive, got {self.viewport_width}x{self.viewport_height}"
-            )
-        if self.chrome_path:
-            chrome_path = Path(self.chrome_path)
-            if not chrome_path.exists():
-                raise ConfigurationError(
-                    f"chrome_path '{self.chrome_path}' does not exist"
-                )
-            if not chrome_path.is_file():
-                raise ConfigurationError(
-                    f"chrome_path '{self.chrome_path}' is not a file"
-                )
+        """Validate configuration values."""
+        pass
 
 
 @dataclass
@@ -75,9 +36,8 @@ class ServerConfig:
     transport_explicitly_set: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"
     login: bool = False
-    status: bool = False  # Check session validity and exit
+    status: bool = False
     logout: bool = False
-    # HTTP transport configuration
     host: str = "127.0.0.1"
     port: int = 8000
     path: str = "/mcp"
@@ -87,20 +47,19 @@ class ServerConfig:
 class AppConfig:
     """Main application configuration."""
 
-    browser: BrowserConfig = field(default_factory=BrowserConfig)
+    cookie: CookieConfig = field(default_factory=CookieConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     is_interactive: bool = field(default=False)
 
     def validate(self) -> None:
-        """Validate all configuration values. Call after modifying config."""
-        self.browser.validate()
+        """Validate all configuration values."""
+        self.cookie.validate()
         if self.server.transport == "streamable-http":
             self._validate_transport_config()
             self._validate_path_format()
         self._validate_port_range()
 
     def _validate_transport_config(self) -> None:
-        """Validate transport configuration is consistent."""
         if not self.server.host:
             raise ConfigurationError("HTTP transport requires a valid host")
         if not self.server.port:
@@ -115,14 +74,12 @@ class AppConfig:
             )
 
     def _validate_port_range(self) -> None:
-        """Validate port is in valid range."""
         if not (1 <= self.server.port <= 65535):
             raise ConfigurationError(
                 f"Port {self.server.port} is not in valid range (1-65535)"
             )
 
     def _validate_path_format(self) -> None:
-        """Validate path format for HTTP transport."""
         if not self.server.path.startswith("/"):
             raise ConfigurationError(
                 f"HTTP path '{self.server.path}' must start with '/'"

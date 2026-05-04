@@ -51,7 +51,7 @@ _RUNTIME_STATE_FIELDS = frozenset(field.name for field in fields(RuntimeState))
 
 def get_source_profile_dir() -> Path:
     """Return the configured source profile directory."""
-    return Path(get_config().browser.user_data_dir).expanduser()
+    return Path(get_config().cookie.profile_dir).expanduser()
 
 
 def auth_root_dir(source_profile_dir: Path | None = None) -> Path:

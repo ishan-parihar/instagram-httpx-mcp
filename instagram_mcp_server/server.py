@@ -35,42 +35,27 @@ logger = logging.getLogger(__name__)
 
 
 @lifespan
-async def browser_lifespan(app: FastMCP) -> AsyncIterator[dict[str, Any]]:
-    """Manage browser lifecycle — cleanup on shutdown.
+async def api_lifespan(app: FastMCP) -> AsyncIterator[dict[str, Any]]:
+    """Manage API lifecycle — no browser needed.
 
-    Derived runtime durability must not depend on this hook. Docker runtime
-    sessions are checkpoint-committed when they are created.
-
-    In CDP mode, browser setup is skipped since we connect to an existing
-    Brave browser instance.
+    All scraping is done through Instagram's private API via httpx.
+    Cookie-based authentication is loaded on demand for each tool call.
     """
     del app
     logger.info("Instagram MCP Server starting...")
     initialize_bootstrap(get_runtime_policy())
-
-    # Only setup browser for legacy mode
-    from instagram_mcp_server.drivers.browser import _cdp_mode_enabled
-
-    if not _cdp_mode_enabled():
-        logger.info("Legacy mode: setting up browser...")
-        await start_background_browser_setup_if_needed()
-    else:
-        logger.info("CDP mode: skipping browser setup")
+    logger.info("API-only mode: no browser setup needed")
 
     yield {}
 
     logger.info("Instagram MCP Server shutting down...")
-
-    # Only close browser for legacy mode
-    if not _cdp_mode_enabled():
-        await close_browser()
 
 
 def create_mcp_server() -> FastMCP:
     """Create and configure the MCP server with all Instagram tools."""
     mcp = FastMCP(
         "instagram_scraper",
-        lifespan=browser_lifespan,
+        lifespan=api_lifespan,
         mask_error_details=True,
     )
     mcp.add_middleware(SequentialToolExecutionMiddleware())

@@ -37,23 +37,91 @@ Add to your client's MCP config (see [full configs below](#mcp-client-configurat
 
 Restart your MCP client. On the first Instagram tool call, a login window opens if no session exists. Log in once, and cookies persist across restarts.
 
+## AI Agent Setup
+
+AI coding agents (Claude Code, Cursor, Windsurf, etc.) that run in headless or non-interactive environments can authenticate by providing Instagram session cookies directly.
+
+### Option A: Set `INSTAGRAM_COOKIES` environment variable (recommended)
+
+Provide cookies as a JSON string at server startup. The server writes them to the profile directory automatically.
+
+```json
+{
+  "sessionid": "your_session_id_value",
+  "csrftoken": "your_csrftoken_value",
+  "ds_user_id": "your_user_id",
+  "ig_did": "your_ig_did_value",
+  "mid": "your_mid_value"
+}
+```
+
+Only `sessionid` and `csrftoken` are required; the others improve reliability.
+
+**MCP client configuration with env var:**
+
+```json
+{
+  "mcpServers": {
+    "instagram": {
+      "command": "uvx",
+      "args": ["instagram-scraper-mcp"],
+      "env": {
+        "INSTAGRAM_COOKIES": "{\"sessionid\":\"...\",\"csrftoken\":\"...\",\"ds_user_id\":\"...\"}"
+      }
+    }
+  }
+}
+```
+
+### Option B: Write `cookies.json` directly
+
+Place a JSON cookie file at `~/.instagram-mcp/profile/cookies.json`. The server reads this path on every startup.
+
+**Supported formats:**
+
+| Format | Example |
+|--------|---------|
+| Flat key-value | `{"sessionid": "...", "csrftoken": "..."}` |
+| List of cookie objects | `[{"name": "sessionid", "value": "...", "domain": ".instagram.com"}, ...]` |
+| Server export format | `{"cookies": [{"name": "sessionid", "value": "..."}], "imported_from": "chrome"}` |
+
+Minimum required keys: `sessionid`, `csrftoken`.
+
+```bash
+mkdir -p ~/.instagram-mcp/profile
+cat > ~/.instagram-mcp/profile/cookies.json << 'EOF'
+{
+  "sessionid": "your_session_id",
+  "csrftoken": "your_csrftoken",
+  "ds_user_id": "your_user_id"
+}
+EOF
+chmod 600 ~/.instagram-mcp/profile/cookies.json
+```
+
+### How to get cookies
+
+1. Open Instagram in a browser and log in.
+2. Use the browser's DevTools (`F12` → Application → Cookies → instagram.com) or a cookie editor extension.
+3. Export the cookies as JSON. Required: `sessionid`, `csrftoken`.
+4. Pass them to the server via env var or file.
+
+> **Note:** Instagram session cookies expire periodically. When tools return `"Instagram session is expired or invalid"`, refresh your cookies and restart the server.
+
 ## How It Works
 
-The server extracts your Instagram session cookies from your running browser (Chrome, Firefox, Edge, Brave, and 10+ others), saves them to `~/.instagram-mcp/profile/`, and launches an **isolated Patchright Chromium instance** with those cookies injected. All scraping happens in this separate browser. Your primary browser is never touched.
+The server reads your Instagram session cookies from your browser's cookie store
+(Chrome, Firefox, Edge, Brave, and 10+ others), saves them to `~/.instagram-mcp/profile/`,
+and authenticates directly with Instagram's private-web API.
 
-```
-Your browser (logged into Instagram)
-  → cookies detected from SQLite cookie store
-  → saved to ~/.instagram-mcp/profile/
-  → injected into isolated Patchright Chromium
-  → all scraping runs in isolated instance
-```
+All data fetching uses Instagram's internal API via httpx. No browser is launched
+for scraping. Your primary browser is only accessed for cookie extraction.
 
 ## Authentication
 
 | Scenario | What happens |
 |----------|-------------|
-| **First run** | Login browser window opens. Complete sign-in (including 2FA if needed). |
+| **First run** | A cookie extraction window opens. Complete sign-in (including 2FA if needed). Your session is saved. |
 | **Subsequent runs** | Cookies loaded from `~/.instagram-mcp/profile/` automatically. |
 | **Session expired** | Re-run `uvx instagram-scraper-mcp --login` to re-authenticate. |
 | **Clear session** | Run `uvx instagram-scraper-mcp --logout` to remove stored cookies. |
@@ -121,11 +189,11 @@ Your browser (logged into Instagram)
 | Tool | Description |
 |------|-------------|
 | `get_user_profile` | Get profile info. Optional sections: posts, reels, stories, highlights, followers, following |
-| `get_user_posts` | Get structured post data (ID, shortcode, URL, thumbnail, media type) |
-| `get_user_reels` | Get reels with IDs, URLs, thumbnails, and view counts |
-| `get_user_stories` | Get active stories with media URLs and expiry timestamps |
+| `get_user_posts` | Get structured post data (ID, shortcode, URL, thumbnail, media type, caption, likes, comments, timestamps, carousel children, preview comments) |
+| `get_user_reels` | Get reels with engagement metrics (plays, likes, comments), audio metadata, and thumbnails |
+| `get_user_stories` | Get active stories with media URLs, video URLs, viewer counts, expiry timestamps, and tappable objects |
 | `get_user_highlights` | Get story highlights with titles, cover URLs, and highlight IDs |
-| `get_post_details` | Get detailed post/reel info including caption, engagement, audio info, and optional comments |
+| `get_post_details` | Get detailed post/reel info including caption, engagement, audio, location, usertags, carousel children, sponsor tags, and optional comments |
 
 ### Search & Discovery (5 tools)
 
@@ -197,7 +265,10 @@ Install the [`caption`](https://github.com/oliverguhr/caption) CLI tool for loca
 
 ### CDP Mode (Opt-in)
 
-Connect directly to a running Brave browser via Chrome DevTools Protocol instead of using cookie import:
+CDP mode is available for cookie extraction. Connect directly to a running
+Chromium-based browser via Chrome DevTools Protocol instead of reading the SQLite
+cookie store directly. This is only relevant for the cookie extraction step, not
+for data fetching.
 
 ```bash
 # Start Brave with remote debugging
@@ -215,7 +286,7 @@ See [docs/CDP_MODE.md](docs/CDP_MODE.md) for details.
 
 ## Docker Setup
 
-Docker runs headless, so create a browser profile on your host first and mount it.
+The Docker container extracts and profiles cookies on your host, then serves the API.
 
 **1. Create profile (one-time)**
 
@@ -250,11 +321,10 @@ See [docs/docker-hub.md](docs/docker-hub.md) for full Docker documentation inclu
 | **Session expired** | Re-run `uvx instagram-scraper-mcp --login` to create a fresh session. |
 | **Captcha challenge** | Use `--login` to solve it manually in the opened browser. |
 | **Page timeout** | Increase timeout: `--timeout 10000` (or higher for slow connections). |
-| **Chrome not found** | Set custom path: `--chrome-path /path/to/chrome` or `CHROME_PATH` env var. |
 | **Multiple Instagram sessions** | Instagram may conflict with concurrent sessions. Log out of other active sessions. |
-| **Browser profile location** | Profile stored at `~/.instagram-mcp/profile/`. Use `--logout` to clear. |
+| **Session profile location** | Profile stored at `~/.instagram-mcp/profile/`. Use `--logout` to clear. |
 
-For debug output, add `--log-level DEBUG`. Use `--no-headless` to watch browser actions.
+For debug output, add `--log-level DEBUG`.
 
 ## Development & Contributing
 
@@ -264,6 +334,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture guidelines, development 
 
 Licensed under the [Apache 2.0 License](LICENSE).
 
-Built with [FastMCP](https://gofastmcp.com/) and [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python).
+Built with [FastMCP](https://gofastmcp.com/) and [httpx](https://www.python-httpx.org/).
 
 Use in accordance with [Instagram's Terms of Use](https://help.instagram.com/581066165581870). Web scraping may violate Instagram's terms. This tool is for personal use only.
