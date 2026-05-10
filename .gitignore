@@ -215,3 +215,7 @@ scripts/snapshot_dumps/
 .memsearch/
 .sisyphus/
 =3.4.0
+
+.contexty
+.memsearch
+.hive
